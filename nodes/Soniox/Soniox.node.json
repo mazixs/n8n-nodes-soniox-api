@@ -1,0 +1,21 @@
+{
+	"node": "n8n-nodes-base.soniox",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": [
+		"AI",
+		"Communication"
+	],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://soniox.com/docs/stt/get-started"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/mazixs/n8n-nodes-soniox-api"
+			}
+		]
+	}
+}

@@ -1,0 +1,10 @@
+node_modules/
+*.ts
+!dist/**/*.d.ts
+tsconfig.json
+.gitignore
+.eslintrc.js
+docs/
+*.md
+!README.md
+gulpfile.js

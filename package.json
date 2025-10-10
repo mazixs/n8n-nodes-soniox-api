@@ -1,0 +1,52 @@
+{
+  "name": "n8n-nodes-soniox-api",
+  "version": "0.1.0",
+  "description": "n8n node for Soniox Speech-to-Text API",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "lint": "eslint nodes credentials --ext .ts",
+    "lintfix": "eslint nodes credentials --ext .ts --fix",
+    "prepublishOnly": "npm run build && npm run lint"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/SonioxApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Soniox/Soniox.node.js"
+    ]
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "soniox",
+    "speech-to-text",
+    "transcription"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/mazixs/n8n-nodes-soniox-api",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mazixs/n8n-nodes-soniox-api.git"
+  },
+  "author": {
+    "name": "mazix",
+    "email": "your-email@example.com"
+  },
+  "devDependencies": {
+    "@types/node": "^18.16.0",
+    "@typescript-eslint/eslint-plugin": "^5.59.0",
+    "@typescript-eslint/parser": "^5.59.0",
+    "eslint": "^8.40.0",
+    "typescript": "~5.1.6",
+    "n8n-workflow": "latest",
+    "n8n-core": "latest",
+    "gulp": "^4.0.2"
+  }
+}
