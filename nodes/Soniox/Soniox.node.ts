@@ -263,6 +263,10 @@ export class Soniox implements INodeType {
 						const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 						const options = this.getNodeParameter('options', i, {}) as IDataObject;
 
+						// CRITICAL: Remove audio_url from additionalFields if somehow present
+						delete additionalFields.audio_url;
+						delete (additionalFields as any).audioUrl;
+
 						// Get binary data
 						const binaryData = items[i].binary;
 						if (!binaryData || !binaryData[binaryPropertyName]) {
@@ -331,8 +335,19 @@ export class Soniox implements INodeType {
 							body.include_nonfinal = additionalFields.includeNonFinal;
 						}
 
-						// Ensure no audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+						// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+						// Delete from body in all possible forms
 						delete body.audio_url;
+						delete (body as any).audioUrl;
+						delete (body as any)[' audio_url'];
+						// Also ensure file_id is present and valid
+						if (!body.file_id) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`file_id is missing from request body. File upload may have failed.`,
+								{ itemIndex: i },
+							);
+						}
 
 						const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
 						const transcriptionId = createResponse.transcription_id || createResponse.id;
@@ -406,6 +421,10 @@ export class Soniox implements INodeType {
 						const model = this.getNodeParameter('model', i, '') as string;
 						const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 
+						// CRITICAL: Remove audio_url from additionalFields if somehow present
+						delete additionalFields.audio_url;
+						delete (additionalFields as any).audioUrl;
+
 						// Validate fileId (must be UUID)
 						if (!fileId || !fileId.trim()) {
 							throw new NodeOperationError(
@@ -467,8 +486,10 @@ export class Soniox implements INodeType {
 							body.include_nonfinal = additionalFields.includeNonFinal;
 						}
 
-						// Ensure no audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+						// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
 						delete body.audio_url;
+						delete (body as any).audioUrl;
+						delete (body as any)[' audio_url'];
 
 						const response = await sonioxApiRequest.call(
 							this,
@@ -485,6 +506,10 @@ export class Soniox implements INodeType {
 					const model = this.getNodeParameter('model', i, '') as string;
 					const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 					const options = this.getNodeParameter('options', i, {}) as IDataObject;
+
+					// CRITICAL: Remove audio_url from additionalFields if somehow present
+					delete additionalFields.audio_url;
+					delete (additionalFields as any).audioUrl;
 
 					const maxWaitTime = (options.maxWaitTime as number) || 300;
 					const checkInterval = (options.checkInterval as number) || 5;
@@ -515,8 +540,19 @@ export class Soniox implements INodeType {
 					if (additionalFields.enableSpeakerDiarization) body.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
 					if (additionalFields.includeNonFinal) body.include_nonfinal = additionalFields.includeNonFinal;
 
-					// Ensure no audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+					// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+					// Delete from body in all possible forms
 					delete body.audio_url;
+					delete (body as any).audioUrl;
+					delete (body as any)[' audio_url'];
+					// Also ensure file_id is present and valid
+					if (!body.file_id) {
+						throw new NodeOperationError(
+							this.getNode(),
+							`file_id is missing from request body. Upload may have failed.`,
+							{ itemIndex: i },
+						);
+					}
 
 					const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
 					const transcriptionId = createResponse.transcription_id || createResponse.id;

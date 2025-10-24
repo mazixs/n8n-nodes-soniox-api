@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2025-10-25
+
+### Fixed
+- **CRITICAL FIX:** Enhanced protection against audio_url parameter leak
+  - Added cleanup of `audio_url` from `additionalFields` BEFORE building request body
+  - Delete audio_url in multiple forms: `audio_url`, `audioUrl`, ` audio_url` (with space)
+  - Added validation to ensure `file_id` is present before sending request
+  - Applied to all operations: Transcribe, Create, Create and Wait
+  
+### Technical Details
+**Root Cause:** The `audio_url` parameter was somehow present in `additionalFields` or being added during request processing, even after `delete body.audio_url`.
+
+**Solution:** Multi-layer protection:
+1. **Line 1:** Delete from `additionalFields` immediately after retrieving them
+2. **Line 2:** Delete from `body` in all possible forms before API call
+3. **Line 3:** Validate `file_id` is present to catch upload failures early
+
+**Code changes:**
+```typescript
+// Step 1: Clean additionalFields
+delete additionalFields.audio_url;
+delete (additionalFields as any).audioUrl;
+
+// Step 2: Clean body before request
+delete body.audio_url;
+delete (body as any).audioUrl;
+delete (body as any)[' audio_url'];
+
+// Step 3: Validate file_id
+if (!body.file_id) {
+  throw new Error('file_id is missing');
+}
+```
+
 ## [0.5.2] - 2025-10-25
 
 ### Fixed
