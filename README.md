@@ -1,5 +1,8 @@
 # n8n-nodes-soniox-api
 
+WIP VERSION! NOT FOR PRODUCTION USE!
+Has not working yet!
+
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-soniox-api.svg)](https://www.npmjs.com/package/n8n-nodes-soniox-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![n8n Community Node](https://img.shields.io/badge/n8n-Community%20Node-blue)](https://docs.n8n.io/integrations/community-nodes/)

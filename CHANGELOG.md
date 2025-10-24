@@ -8,9 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.1] - 2025-10-25
 
 ### Fixed
-- Improved error messages in Create and Wait operation
-- Now shows actual API response when transcription_id is missing
-- Better debugging information for transcription creation failures
+- **API compatibility:** Support both `transcription_id` and `id` fields from API response
+- **Status checking:** Added support for `success` and `SUCCESS` statuses
+- **Error handling:** Show actual error message from API (`error_message`, `error_type`)
+- **Better error messages:** Display full API response for debugging
+- Fixed "Failed to create transcription" when API returns `id` instead of `transcription_id`
 
 ## [0.4.0] - 2025-10-25
 

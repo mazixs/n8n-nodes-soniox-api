@@ -367,12 +367,12 @@ export class Soniox implements INodeType {
 					if (additionalFields.includeNonFinal) body.include_nonfinal = additionalFields.includeNonFinal;
 
 					const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
-					const transcriptionId = createResponse.transcription_id;
+					const transcriptionId = createResponse.transcription_id || createResponse.id;
 
 					if (!transcriptionId) {
 						throw new NodeOperationError(
 							this.getNode(),
-							`Failed to create transcription: API did not return transcription_id. Response: ${JSON.stringify(createResponse)}`,
+							`Failed to create transcription: API did not return transcription_id or id. Response: ${JSON.stringify(createResponse)}`,
 							{ itemIndex: i },
 						);
 					}
@@ -388,13 +388,14 @@ export class Soniox implements INodeType {
 						const statusResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}`);
 						lastStatus = (statusResponse.status as string) || '';
 
-						if (lastStatus === 'completed' || lastStatus === 'COMPLETED') {
+						if (lastStatus === 'completed' || lastStatus === 'COMPLETED' || lastStatus === 'success' || lastStatus === 'SUCCESS') {
 							transcriptionResult = statusResponse;
 							break;
 						}
 
-						if (lastStatus === 'failed' || lastStatus === 'FAILED') {
-							throw new NodeOperationError(this.getNode(), `Transcription failed: ${lastStatus}`, { itemIndex: i });
+						if (lastStatus === 'failed' || lastStatus === 'FAILED' || lastStatus === 'error' || lastStatus === 'ERROR') {
+							const errorMsg = statusResponse.error_message || statusResponse.error_type || 'Unknown error';
+							throw new NodeOperationError(this.getNode(), `Transcription failed: ${lastStatus}. ${errorMsg}`, { itemIndex: i });
 						}
 					}
 
