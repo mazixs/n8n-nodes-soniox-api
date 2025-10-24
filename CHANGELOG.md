@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2025-10-25
+
+### Fixed
+- **Status validation:** Use only official Soniox API statuses: `"queued"`, `"processing"`, `"completed"`, `"error"`
+- **Removed invalid statuses:** Removed non-existent `"success"`, `"SUCCESS"`, `"failed"`, `"FAILED"` statuses
+- **Error handling:** Now uses `message` field from API error responses (primary error field)
+- **Request ID:** Include `request_id` in error messages for easier support debugging
+- **Documentation:** Added inline comments with official API status values
+
+### Technical Details
+According to [Soniox API documentation](https://soniox.com/docs/stt/api-reference/transcriptions/get_transcription):
+- Valid statuses: `"queued" | "processing" | "completed" | "error"`
+- Error response includes: `message`, `error_type`, `error_message`, `request_id`
+- Previous version used incorrect statuses that don't exist in the API
+
 ## [0.4.3] - 2025-10-25
 
 ### Fixed

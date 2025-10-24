@@ -388,7 +388,8 @@ export class Soniox implements INodeType {
 						const statusResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}`);
 						lastStatus = (statusResponse.status as string) || '';
 
-						if (lastStatus === 'completed' || lastStatus === 'COMPLETED' || lastStatus === 'success' || lastStatus === 'SUCCESS') {
+						// Soniox API statuses: "queued" | "processing" | "completed" | "error"
+						if (lastStatus === 'completed') {
 							// Get the actual transcript result
 							const transcriptResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}/transcript`);
 							transcriptionResult = {
@@ -398,10 +399,18 @@ export class Soniox implements INodeType {
 							break;
 						}
 
-						if (lastStatus === 'failed' || lastStatus === 'FAILED' || lastStatus === 'error' || lastStatus === 'ERROR') {
-							const errorMsg = statusResponse.error_message || statusResponse.error_type || 'Unknown error';
-							throw new NodeOperationError(this.getNode(), `Transcription failed: ${lastStatus}. ${errorMsg}`, { itemIndex: i });
+						if (lastStatus === 'error') {
+							// Soniox API returns error details in these fields
+							const errorMsg = statusResponse.message || statusResponse.error_message || statusResponse.error_type || 'Unknown error';
+							const requestId = statusResponse.request_id ? ` (Request ID: ${statusResponse.request_id})` : '';
+							throw new NodeOperationError(
+								this.getNode(),
+								`Transcription failed: ${errorMsg}${requestId}`,
+								{ itemIndex: i },
+							);
 						}
+
+						// Continue polling for "queued" or "processing" statuses
 					}
 
 					if (!transcriptionResult) {
