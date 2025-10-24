@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2025-10-24
+
+### Added
+- **Input validation** for Transcription Create operation
+  - File ID validation (must be valid UUID format)
+  - Model field is now required
+  - Clear error messages when validation fails
+
+### Changed
+- Model field marked as required in UI
+- Improved model loading with better API response handling
+- Better fallback models when API is unavailable
+
+### Fixed
+- Fixed "Invalid model" error by making model field required
+- Fixed "Invalid UUID" error with proper file_id validation
+- Better error messages help users identify issues faster
+
 ## [0.2.1] - 2025-10-24
 
 ### Added

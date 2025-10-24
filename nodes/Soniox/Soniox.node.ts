@@ -78,16 +78,41 @@ export class Soniox implements INodeType {
 
 					const models = Array.isArray(response) ? response : response.models || [];
 
-					return models.map((model: IDataObject) => ({
-						name: (model.name as string) || (model.model_id as string) || String(model),
-						value: (model.model_id as string) || (model.name as string) || String(model),
-						description: model.description as string,
-					}));
+					// Transform models into options
+					const options = models.map((model: IDataObject) => {
+						// Handle different response formats
+						let modelId: string;
+						let modelName: string;
+						let modelDescription: string | undefined;
+
+						if (typeof model === 'string') {
+							// Simple string format
+							modelId = model;
+							modelName = model;
+						} else {
+							// Object format
+							modelId = (model.model_id || model.id || model.name || model.value) as string;
+							modelName = (model.name || model.display_name || modelId) as string;
+							modelDescription = model.description as string | undefined;
+						}
+
+						return {
+							name: modelName,
+							value: modelId,
+							description: modelDescription || modelName,
+						};
+					}).filter((option: INodePropertyOptions) => option.value); // Remove invalid entries
+
+					if (options.length === 0) {
+						throw new Error('No models returned from API');
+					}
+
+					return options;
 				} catch {
 					// Fallback if API fails
 					return [
-						{ name: 'en_v2_lowlatency', value: 'en_v2_lowlatency', description: 'English v2 Low Latency' },
-						{ name: 'en_v2', value: 'en_v2', description: 'English v2' },
+						{ name: 'English v2 Low Latency', value: 'en_v2_lowlatency', description: 'English v2 Low Latency model' },
+						{ name: 'English v2', value: 'en_v2', description: 'English v2 model' },
 					];
 				}
 			},
@@ -231,13 +256,38 @@ export class Soniox implements INodeType {
 						const model = this.getNodeParameter('model', i, '') as string;
 						const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 
-						const body: IDataObject = {
-							file_id: fileId,
-						};
-
-						if (model) {
-							body.model = model;
+						// Validate fileId (must be UUID)
+						if (!fileId || !fileId.trim()) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'File ID is required',
+								{ itemIndex: i },
+							);
 						}
+
+						// UUID format validation
+						const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+						if (!uuidRegex.test(fileId.trim())) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`File ID must be a valid UUID. Received: "${fileId}". Please use the file_id from the File Upload operation.`,
+								{ itemIndex: i },
+							);
+						}
+
+						// Validate model
+						if (!model || !model.trim()) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Model is required. Please select a model from the dropdown.',
+								{ itemIndex: i },
+							);
+						}
+
+						const body: IDataObject = {
+							file_id: fileId.trim(),
+							model: model.trim(),
+						};
 
 						if (additionalFields.language) {
 							body.language = additionalFields.language;

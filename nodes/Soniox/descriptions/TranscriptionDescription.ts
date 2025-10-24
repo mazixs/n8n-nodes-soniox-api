@@ -60,13 +60,15 @@ export const transcriptionFields: INodeProperties[] = [
 			loadOptionsMethod: 'getModels',
 		},
 		default: '',
+		required: true,
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
 				operation: ['create'],
 			},
 		},
-		description: 'The model to use for transcription (loaded from API)',
+		description: 'The model to use for transcription (loaded from Soniox API)',
+		placeholder: 'Select a model',
 	},
 	{
 		displayName: 'Additional Fields',
