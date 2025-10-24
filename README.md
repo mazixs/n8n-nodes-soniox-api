@@ -116,7 +116,7 @@ The simplest way to transcribe audio - just **one node**:
 - Resource: `Transcription`
 - Operation: `Transcribe`
 - Binary Property: `data`
-- Model: `English v2 Low Latency` (or any model from dropdown)
+- Model: `Realtime or Async` (or any model from dropdown)
 - Additional Fields:
   - Language: `en` (optional, auto-detected if not specified)
   - Context: Domain-specific terms (optional)
