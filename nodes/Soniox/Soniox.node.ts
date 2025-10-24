@@ -331,6 +331,76 @@ export class Soniox implements INodeType {
 						returnData.push({ json: response });
 					}
 
+				else if (operation === 'createAndWait') {
+					const fileId = this.getNodeParameter('fileId', i) as string;
+					const model = this.getNodeParameter('model', i, '') as string;
+					const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+					const options = this.getNodeParameter('options', i, {}) as IDataObject;
+
+					const maxWaitTime = (options.maxWaitTime as number) || 300;
+					const checkInterval = (options.checkInterval as number) || 5;
+
+					if (!fileId || !fileId.trim()) {
+						throw new NodeOperationError(this.getNode(), 'File ID is required', { itemIndex: i });
+					}
+
+					const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+					if (!uuidRegex.test(fileId.trim())) {
+						throw new NodeOperationError(this.getNode(), `File ID must be a valid UUID. Received: "${fileId}".`, { itemIndex: i });
+					}
+
+					if (!model || !model.trim()) {
+						throw new NodeOperationError(this.getNode(), 'Model is required.', { itemIndex: i });
+					}
+
+					const body: IDataObject = { file_id: fileId.trim(), model: model.trim() };
+
+					if (additionalFields.language) body.language = additionalFields.language;
+					if (additionalFields.context) body.context = additionalFields.context;
+
+					if (additionalFields.translationLanguages) {
+						const languages = (additionalFields.translationLanguages as string).split(',').map(l => l.trim()).filter(l => l.length > 0);
+						if (languages.length > 0) body.translation_languages = languages;
+					}
+
+					if (additionalFields.enableSpeakerDiarization) body.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
+					if (additionalFields.includeNonFinal) body.include_nonfinal = additionalFields.includeNonFinal;
+
+					const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
+					const transcriptionId = createResponse.transcription_id;
+
+					if (!transcriptionId) {
+						throw new NodeOperationError(this.getNode(), 'Failed to create transcription', { itemIndex: i });
+					}
+
+					const startTime = Date.now();
+					const maxWaitMs = maxWaitTime * 1000;
+					const checkIntervalMs = checkInterval * 1000;
+					let transcriptionResult: IDataObject | null = null;
+					let lastStatus = '';
+
+					while (Date.now() - startTime < maxWaitMs) {
+						await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+						const statusResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}`);
+						lastStatus = (statusResponse.status as string) || '';
+
+						if (lastStatus === 'completed' || lastStatus === 'COMPLETED') {
+							transcriptionResult = statusResponse;
+							break;
+						}
+
+						if (lastStatus === 'failed' || lastStatus === 'FAILED') {
+							throw new NodeOperationError(this.getNode(), `Transcription failed: ${lastStatus}`, { itemIndex: i });
+						}
+					}
+
+					if (!transcriptionResult) {
+						throw new NodeOperationError(this.getNode(), `Timeout after ${maxWaitTime}s. Status: ${lastStatus}. ID: ${transcriptionId}`, { itemIndex: i });
+					}
+
+					returnData.push({ json: transcriptionResult });
+				}
+
 					else if (operation === 'get') {
 						const transcriptionId = this.getNodeParameter('transcriptionId', i) as string;
 

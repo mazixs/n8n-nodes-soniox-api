@@ -14,9 +14,15 @@ export const transcriptionOperations: INodeProperties[] = [
 		},
 		options: [
 			{
+				name: 'Create and Wait',
+				value: 'createAndWait',
+				description: 'Create a transcription and wait for completion',
+				action: 'Create and wait for transcription',
+			},
+			{
 				name: 'Create',
 				value: 'create',
-				description: 'Create a transcription',
+				description: 'Create a transcription (returns immediately)',
 				action: 'Create a transcription',
 			},
 			{
@@ -43,7 +49,7 @@ export const transcriptionOperations: INodeProperties[] = [
 ];
 
 export const transcriptionFields: INodeProperties[] = [
-	// Create operation
+	// Create and Create and Wait operations - File ID
 	{
 		displayName: 'File ID',
 		name: 'fileId',
@@ -53,11 +59,12 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['create'],
+				operation: ['create', 'createAndWait'],
 			},
 		},
 		description: 'The ID of the file to transcribe',
 	},
+	// Create and Create and Wait operations - Model
 	{
 		displayName: 'Model',
 		name: 'model',
@@ -70,12 +77,13 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['create'],
+				operation: ['create', 'createAndWait'],
 			},
 		},
 		description: 'The model to use for transcription (loaded from Soniox API)',
 		placeholder: 'Select a model',
 	},
+	// Create and Create and Wait operations - Additional Fields
 	{
 		displayName: 'Additional Fields',
 		name: 'additionalFields',
@@ -85,7 +93,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['create'],
+				operation: ['create', 'createAndWait'],
 			},
 		},
 		options: [
@@ -129,6 +137,44 @@ export const transcriptionFields: INodeProperties[] = [
 				type: 'boolean',
 				default: false,
 				description: 'Whether to include non-final results',
+			},
+		],
+	},
+	// Create and Wait - Options
+	{
+		displayName: 'Options',
+		name: 'options',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['createAndWait'],
+			},
+		},
+		options: [
+			{
+				displayName: 'Max Wait Time (seconds)',
+				name: 'maxWaitTime',
+				type: 'number',
+				default: 300,
+				description: 'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
+				typeOptions: {
+					minValue: 10,
+					maxValue: 1800,
+				},
+			},
+			{
+				displayName: 'Check Interval (seconds)',
+				name: 'checkInterval',
+				type: 'number',
+				default: 5,
+				description: 'How often to check transcription status (default: 5 seconds)',
+				typeOptions: {
+					minValue: 1,
+					maxValue: 60,
+				},
 			},
 		],
 	},
