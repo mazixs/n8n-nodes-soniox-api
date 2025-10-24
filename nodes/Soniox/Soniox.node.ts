@@ -311,6 +311,7 @@ export class Soniox implements INodeType {
 							model: model.trim(),
 						};
 
+						// Add only specific fields from additionalFields (avoid sending audio_url accidentally)
 						if (additionalFields.language) body.language = additionalFields.language;
 						if (additionalFields.context) body.context = additionalFields.context;
 
@@ -329,6 +330,9 @@ export class Soniox implements INodeType {
 						if (additionalFields.includeNonFinal) {
 							body.include_nonfinal = additionalFields.includeNonFinal;
 						}
+
+						// Ensure no audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+						delete body.audio_url;
 
 						const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
 						const transcriptionId = createResponse.transcription_id || createResponse.id;
@@ -463,6 +467,9 @@ export class Soniox implements INodeType {
 							body.include_nonfinal = additionalFields.includeNonFinal;
 						}
 
+						// Ensure no audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+						delete body.audio_url;
+
 						const response = await sonioxApiRequest.call(
 							this,
 							'POST',
@@ -507,6 +514,9 @@ export class Soniox implements INodeType {
 
 					if (additionalFields.enableSpeakerDiarization) body.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
 					if (additionalFields.includeNonFinal) body.include_nonfinal = additionalFields.includeNonFinal;
+
+					// Ensure no audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+					delete body.audio_url;
 
 					const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
 					const transcriptionId = createResponse.transcription_id || createResponse.id;

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2025-10-25
+
+### Fixed
+- **Critical bug:** Fixed "Expected audio_url or file_id but not both" error
+  - Issue: API was receiving both `file_id` AND `audio_url` parameters simultaneously
+  - Solution: Explicitly exclude `audio_url` from request body when using `file_id`
+  - Affected operations: Transcribe, Create, Create and Wait
+  - Now works correctly with files from Telegram and other sources
+
+### Technical Details
+The Soniox API requires **ONLY ONE** of these parameters:
+- `file_id` (for uploaded files) OR
+- `audio_url` (for public URLs)
+
+Previous version could accidentally send both, causing 400 Bad Request error.
+Now `delete body.audio_url` ensures clean request body.
+
 ## [0.5.1] - 2025-10-25
 
 ### Improved

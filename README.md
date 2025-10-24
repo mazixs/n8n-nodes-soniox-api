@@ -1,6 +1,7 @@
 # n8n-nodes-soniox-api
 
-✅ **Production Ready!** Fully tested and working.
+WIP VERSION! NOT FOR PRODUCTION USE!
+Has not working yet!
 
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-soniox-api.svg)](https://www.npmjs.com/package/n8n-nodes-soniox-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
