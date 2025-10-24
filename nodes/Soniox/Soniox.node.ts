@@ -389,7 +389,12 @@ export class Soniox implements INodeType {
 						lastStatus = (statusResponse.status as string) || '';
 
 						if (lastStatus === 'completed' || lastStatus === 'COMPLETED' || lastStatus === 'success' || lastStatus === 'SUCCESS') {
-							transcriptionResult = statusResponse;
+							// Get the actual transcript result
+							const transcriptResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}/transcript`);
+							transcriptionResult = {
+								...statusResponse,
+								transcript: transcriptResponse,
+							};
 							break;
 						}
 
