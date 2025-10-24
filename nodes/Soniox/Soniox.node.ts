@@ -370,7 +370,11 @@ export class Soniox implements INodeType {
 					const transcriptionId = createResponse.transcription_id;
 
 					if (!transcriptionId) {
-						throw new NodeOperationError(this.getNode(), 'Failed to create transcription', { itemIndex: i });
+						throw new NodeOperationError(
+							this.getNode(),
+							`Failed to create transcription: API did not return transcription_id. Response: ${JSON.stringify(createResponse)}`,
+							{ itemIndex: i },
+						);
 					}
 
 					const startTime = Date.now();
