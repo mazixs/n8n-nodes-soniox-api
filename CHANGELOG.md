@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2025-10-25
+
+### Fixed
+- **CRITICAL:** File upload now works! Fixed API response field mismatch
+  - **Problem:** Soniox Files API returns `id` instead of `file_id` as documented
+  - **Solution:** Support both `uploadResponse.id` and `uploadResponse.file_id`
+  - **Impact:** Telegram files and all binary uploads now work correctly
+  
+### Changed
+- Removed debug logging (no longer needed after finding the issue)
+- Improved error message for upload failures
+
+### Technical Details
+**Root Cause:** Soniox API documentation shows `file_id` in response, but actual API returns just `id`:
+
+**Documented response:**
+```json
+{
+  "file_id": "uuid-here",
+  ...
+}
+```
+
+**Actual API response:**
+```json
+{
+  "id": "uuid-here",    ← Different field name!
+  "filename": "...",
+  "size": 1248377,
+  ...
+}
+```
+
+**Fix:**
+```typescript
+// Support both formats for API compatibility
+const fileId = uploadResponse.id || uploadResponse.file_id;
+```
+
+This ensures compatibility with both current API and possible future changes.
+
 ## [0.5.4] - 2025-10-25
 
 ### Added

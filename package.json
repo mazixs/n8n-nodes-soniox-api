@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-soniox-api",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "n8n node for Soniox Speech-to-Text API",
   "main": "index.js",
   "scripts": {

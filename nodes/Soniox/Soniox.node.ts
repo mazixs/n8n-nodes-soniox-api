@@ -298,12 +298,6 @@ export class Soniox implements INodeType {
 							},
 						};
 
-						// DEBUG: Log upload attempt
-						console.log('[SONIOX DEBUG] Starting file upload...');
-						console.log('[SONIOX DEBUG] File name:', uploadFileName);
-						console.log('[SONIOX DEBUG] Content type:', binaryData[binaryPropertyName].mimeType);
-						console.log('[SONIOX DEBUG] File size:', binaryData[binaryPropertyName].fileSize || 'unknown');
-
 						const uploadResponse = await sonioxApiRequest.call(
 							this,
 							'POST',
@@ -314,20 +308,16 @@ export class Soniox implements INodeType {
 							{ formData },
 						);
 
-						// DEBUG: Log upload response
-						console.log('[SONIOX DEBUG] Upload response:', JSON.stringify(uploadResponse, null, 2));
-						
-						const fileId = uploadResponse.file_id;
+						// API returns 'id', not 'file_id'!
+						const fileId = uploadResponse.id || uploadResponse.file_id;
 						
 						if (!fileId) {
 							throw new NodeOperationError(
 								this.getNode(),
-								`File upload failed: no file_id in response. Response: ${JSON.stringify(uploadResponse)}`,
+								`File upload failed: no id in response. Response: ${JSON.stringify(uploadResponse)}`,
 								{ itemIndex: i },
 							);
 						}
-						
-						console.log('[SONIOX DEBUG] File uploaded successfully, file_id:', fileId);
 
 						// Step 2: Create transcription
 						const body: IDataObject = {
