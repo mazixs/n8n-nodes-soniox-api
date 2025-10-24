@@ -1,13 +1,19 @@
 # n8n-nodes-soniox-api
 
-WIP VERSION! NOT FOR PRODUCTION USE!
-Has not working yet!
+✅ **Production Ready!** Fully tested and working.
 
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-soniox-api.svg)](https://www.npmjs.com/package/n8n-nodes-soniox-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![n8n Community Node](https://img.shields.io/badge/n8n-Community%20Node-blue)](https://docs.n8n.io/integrations/community-nodes/)
 
-This is an n8n community node that integrates [Soniox Speech-to-Text API](https://soniox.com/) — a high-accuracy speech recognition system.
+This is an n8n community node that integrates [Soniox Speech-to-Text API](https://soniox.com/) — a high-accuracy, multilingual speech recognition system.
+
+**Features:**
+- 🎯 One-node transcription (like Whisper node)
+- 🌍 60+ languages supported
+- 🎭 Speaker diarization
+- 🔄 Real-time translations
+- ⚡ Async processing with auto-polling
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -59,25 +65,29 @@ npm link n8n-nodes-soniox-api
 
 ## Operations
 
-This node supports the following operations:
+### Transcription Operations (Recommended)
+- **Transcribe** 🆕 — All-in-one audio transcription (like Whisper node)
+  - Input: Binary audio data
+  - Output: Complete transcript with text + tokens + metadata
+  - Automatically handles: upload → create → wait → get transcript
+  - Configurable: model, language, speaker diarization, translations, timeout
+- **Get** — Retrieve existing transcription result by ID
+- **List** — List all transcriptions (with pagination)
 
-### File Operations
+### File Operations (Advanced)
 - **Upload** — Upload audio files (multipart/form-data support)
 - **Get** — Retrieve file by ID
 - **Get All** — List all files (with pagination)
 - **Delete** — Delete a file
 
-### Transcription Operations
-- **Create** — Create transcription with configurable parameters:
-  - Model selection
-  - Language hints
-  - Speaker diarization
-  - Non-final results
-- **Get** — Retrieve transcription result by ID
-- **Get All** — List all transcriptions (with pagination)
-
 ### Model Operations
 - **Get All** — List available speech recognition models
+
+### Deprecated Operations
+The following operations still work but will be removed in v0.6.0:
+- **Create** → use **Transcribe** instead
+- **Create and Wait** → use **Transcribe** instead
+- **Get By File** → use **Get** instead
 
 ## Credentials
 
@@ -91,41 +101,57 @@ This node supports the following operations:
 
 ## Usage
 
-### Basic Workflow Example
+### Quick Start (Recommended)
 
-Here's a simple workflow to upload an audio file and transcribe it:
+The simplest way to transcribe audio - just **one node**:
 
 ```
-[Read Binary File] 
+[Read Binary File] → [Soniox: Transcribe] → Done!
+```
+
+**Node Configuration:**
+
+**Soniox: Transcribe**
+- Resource: `Transcription`
+- Operation: `Transcribe`
+- Binary Property: `data`
+- Model: `English v2 Low Latency` (or any model from dropdown)
+- Additional Fields:
+  - Language: `en` (optional, auto-detected if not specified)
+  - Context: Domain-specific terms (optional)
+  - Translation Languages: `ru,es,fr` (optional)
+  - Enable Speaker Diarization: `true` (optional)
+
+**Output:**
+```json
+{
+  "transcript": {
+    "text": "Full transcribed text here",
+    "tokens": [
+      {"text": "Hello", "start_ms": 10, "confidence": 0.95}
+    ]
+  },
+  "status": "completed",
+  "model": "stt-async-v3",
+  "audio_duration_ms": 16079
+}
+```
+
+### Advanced Workflow (Multiple Nodes)
+
+For more control, use separate nodes:
+
+```
+[Read Binary File]
     ↓
 [Soniox: File Upload]
     ↓
-[Soniox: Transcription Create]
+[Soniox: Create and Wait]
     ↓
-[Soniox: Transcription Get]
+[Process Result]
 ```
 
-### Node Configuration
-
-**1. Read Binary File**
-- Property Name: `data`
-- File Path: `/path/to/audio.mp3`
-
-**2. Soniox: File Upload**
-- Resource: `File`
-- Operation: `Upload`
-- Binary Property: `data`
-
-**3. Soniox: Transcription Create**
-- Resource: `Transcription`
-- Operation: `Create`
-- File ID: `{{ $json.fileId }}`
-- Model: `en_v2_lowlatency`
-
-**4. Soniox: Transcription Get**
-- Resource: `Transcription`
-- Operation: `Get`
-- Transcription ID: `{{ $json.transcriptionId }}`
+**Note:** The advanced workflow requires 2-3 nodes. We recommend using **Transcribe** for simplicity.
 
 ## Features
 

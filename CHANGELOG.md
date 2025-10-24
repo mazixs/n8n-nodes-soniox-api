@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-10-25
+
+### Added
+- 🎉 **New "Transcribe" operation** - All-in-one audio transcription like Whisper node!
+  - Upload audio → Create transcription → Wait → Get transcript in ONE node
+  - Input: Binary audio data (no need for separate File Upload node)
+  - Output: Complete transcript with text + tokens + metadata
+  - Configurable: timeout, check interval, model, language, speaker diarization, translations
+  - Follows Whisper node UX pattern for better user experience
+
+### Changed
+- **Simplified workflow:** 1 node instead of 2-3 nodes
+- **Renamed "Get All" → "List"** for better clarity
+- **Deprecated operations** (will be removed in v0.6.0):
+  - "Create" → use "Transcribe" instead
+  - "Create and Wait" → use "Transcribe" instead
+  - "Get By File" → use "Get" instead
+- All deprecated operations still work with backward compatibility
+
+### Documentation
+- Added `docs/SONIOX_API_OFFICIAL.md` - complete official API documentation
+- Added `docs/TRANSCRIBE_IMPLEMENTATION.md` - implementation details
+- Added `REFACTORING_PLAN.md` - refactoring roadmap
+
+### Migration Guide
+
+**Old workflow (2-3 nodes):**
+```
+Binary File → Soniox: File Upload → Soniox: Create and Wait
+```
+
+**New workflow (1 node):**
+```
+Binary File → Soniox: Transcribe
+```
+
+### Breaking Changes
+None - all old operations continue to work.
+
 ## [0.4.4] - 2025-10-25
 
 ### Fixed

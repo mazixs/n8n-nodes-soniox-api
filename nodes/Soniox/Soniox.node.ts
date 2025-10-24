@@ -255,7 +255,148 @@ export class Soniox implements INodeType {
 				}
 
 				else if (resource === 'transcription') {
-					if (operation === 'create') {
+					if (operation === 'transcribe') {
+						// All-in-one transcription: Upload → Create → Wait → Get Transcript
+						const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
+						const model = this.getNodeParameter('model', i, '') as string;
+						const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+						const options = this.getNodeParameter('options', i, {}) as IDataObject;
+
+						// Get binary data
+						const binaryData = items[i].binary;
+						if (!binaryData || !binaryData[binaryPropertyName]) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`No binary data found in property "${binaryPropertyName}". Please provide audio file data.`,
+								{ itemIndex: i },
+							);
+						}
+
+						// Validate model
+						if (!model || !model.trim()) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Model is required. Please select a model from the dropdown.',
+								{ itemIndex: i },
+							);
+						}
+
+						// Step 1: Upload file
+						const uploadFileName = binaryData[binaryPropertyName].fileName || `audio_${Date.now()}.${binaryData[binaryPropertyName].fileExtension || 'mp3'}`;
+						const formData = {
+							file: {
+								value: await this.helpers.getBinaryDataBuffer(i, binaryPropertyName),
+								options: {
+									filename: uploadFileName,
+									contentType: binaryData[binaryPropertyName].mimeType,
+								},
+							},
+						};
+
+						const uploadResponse = await sonioxApiRequest.call(
+							this,
+							'POST',
+							'/files',
+							{},
+							{},
+							undefined,
+							{ formData },
+						);
+						const fileId = uploadResponse.file_id;
+
+						// Step 2: Create transcription
+						const body: IDataObject = {
+							file_id: fileId,
+							model: model.trim(),
+						};
+
+						if (additionalFields.language) body.language = additionalFields.language;
+						if (additionalFields.context) body.context = additionalFields.context;
+
+						if (additionalFields.translationLanguages) {
+							const languages = (additionalFields.translationLanguages as string)
+								.split(',')
+								.map(l => l.trim())
+								.filter(l => l.length > 0);
+							if (languages.length > 0) body.translation_languages = languages;
+						}
+
+						if (additionalFields.enableSpeakerDiarization) {
+							body.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
+						}
+
+						if (additionalFields.includeNonFinal) {
+							body.include_nonfinal = additionalFields.includeNonFinal;
+						}
+
+						const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
+						const transcriptionId = createResponse.transcription_id || createResponse.id;
+
+						if (!transcriptionId) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Failed to create transcription: API did not return transcription_id or id. Response: ${JSON.stringify(createResponse)}`,
+								{ itemIndex: i },
+							);
+						}
+
+						// Step 3: Poll for completion
+						const maxWaitTime = (options.maxWaitTime as number) || 300;
+						const checkInterval = (options.checkInterval as number) || 5;
+						const startTime = Date.now();
+						const maxWaitMs = maxWaitTime * 1000;
+						const checkIntervalMs = checkInterval * 1000;
+
+						let transcriptionResult: IDataObject | null = null;
+						let lastStatus = '';
+
+						while (Date.now() - startTime < maxWaitMs) {
+							await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+							const statusResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}`);
+							lastStatus = (statusResponse.status as string) || '';
+
+							// Soniox API statuses: "queued" | "processing" | "completed" | "error"
+							if (lastStatus === 'completed') {
+								// Step 4: Get transcript
+								const transcriptResponse = await sonioxApiRequest.call(
+									this,
+									'GET',
+									`/transcriptions/${transcriptionId}/transcript`,
+								);
+
+								transcriptionResult = {
+									...statusResponse,
+									transcript: transcriptResponse,
+								};
+								break;
+							}
+
+							if (lastStatus === 'error') {
+								// Soniox API returns error details in these fields
+								const errorMsg = statusResponse.message || statusResponse.error_message || statusResponse.error_type || 'Unknown error';
+								const requestId = statusResponse.request_id ? ` (Request ID: ${statusResponse.request_id})` : '';
+								throw new NodeOperationError(
+									this.getNode(),
+									`Transcription failed: ${errorMsg}${requestId}`,
+									{ itemIndex: i },
+								);
+							}
+
+							// Continue polling for "queued" or "processing" statuses
+						}
+
+						if (!transcriptionResult) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Transcription timeout after ${maxWaitTime}s. Status: ${lastStatus}. ID: ${transcriptionId}`,
+								{ itemIndex: i },
+							);
+						}
+
+						returnData.push({ json: transcriptionResult });
+					}
+
+					else if (operation === 'create') {
 						const fileId = this.getNodeParameter('fileId', i) as string;
 						const model = this.getNodeParameter('model', i, '') as string;
 						const additionalFields = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
@@ -471,7 +612,8 @@ export class Soniox implements INodeType {
 						});
 					}
 
-					else if (operation === 'getAll') {
+					else if (operation === 'list' || operation === 'getAll') {
+						// Support both 'list' (new) and 'getAll' (deprecated) for backward compatibility
 						const returnAll = this.getNodeParameter('returnAll', i);
 
 						let responseData;
@@ -492,9 +634,9 @@ export class Soniox implements INodeType {
 							);
 						}
 
-						const transcriptionItems = Array.isArray(responseData) ? responseData : responseData.items || [];
-						transcriptionItems.forEach((item: IDataObject) => {
-							returnData.push({ json: item });
+						const transcriptions = responseData.transcriptions || [];
+						transcriptions.forEach((transcription: IDataObject) => {
+							returnData.push({ json: transcription });
 						});
 					}
 				}
