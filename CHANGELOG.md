@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-10-24
+
+### Added
+- **Context field** in Transcription Create for improved accuracy
+  - Provide domain-specific terms, names, or context
+  - Helps improve transcription quality
+- **Translation Languages** field for multi-language translation
+  - Comma-separated language codes (e.g., "ru,es,fr")
+  - Get translations along with transcription
+- **Get By File operation** for Transcription resource
+  - Get transcription results directly by file_id
+  - No need to track transcription_id separately
+  - Validates UUID format with helpful error messages
+
+### Changed
+- File Upload now returns both `fileId` and `file_id` fields
+- File Upload includes full API response in output
+- Better compatibility with different naming conventions
+- Enhanced language field description with more examples
+
+### Fixed
+- Simplified workflow: File Upload → Transcription Get By File
+- Easier to use file_id from upload directly in transcription retrieval
+
 ## [0.2.2] - 2025-10-24
 
 ### Added

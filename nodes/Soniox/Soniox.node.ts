@@ -181,14 +181,18 @@ export class Soniox implements INodeType {
 							{ formData },
 						);
 
-						// 7. Вернуть результат
+						// 7. Вернуть результат (с полным ответом API + удобные поля)
 						returnData.push({
 							json: {
+								// Convenient fields for easy access
 								fileId: response.file_id,
+								file_id: response.file_id, // Alternative name for compatibility
 								fileName: uploadFileName,
 								mimeType: binaryData.mimeType,
 								fileSize: binaryData.fileSize,
 								uploadedAt: new Date().toISOString(),
+								// Full API response
+								...response,
 							},
 						});
 					}
@@ -293,6 +297,22 @@ export class Soniox implements INodeType {
 							body.language = additionalFields.language;
 						}
 
+						if (additionalFields.context) {
+							body.context = additionalFields.context;
+						}
+
+						if (additionalFields.translationLanguages) {
+							// Parse comma-separated languages
+							const languages = (additionalFields.translationLanguages as string)
+								.split(',')
+								.map(lang => lang.trim())
+								.filter(lang => lang.length > 0);
+							
+							if (languages.length > 0) {
+								body.translation_languages = languages;
+							}
+						}
+
 						if (additionalFields.enableSpeakerDiarization) {
 							body.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
 						}
@@ -321,6 +341,45 @@ export class Soniox implements INodeType {
 						);
 
 						returnData.push({ json: response });
+					}
+
+					else if (operation === 'getByFile') {
+						const fileId = this.getNodeParameter('fileId', i) as string;
+
+						// UUID format validation
+						const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+						if (!uuidRegex.test(fileId.trim())) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`File ID must be a valid UUID. Received: "${fileId}". Please use the fileId from the File Upload operation.`,
+								{ itemIndex: i },
+							);
+						}
+
+						// Get transcription by file_id query parameter
+						const response = await sonioxApiRequest.call(
+							this,
+							'GET',
+							'/transcriptions',
+							{},
+							{ file_id: fileId.trim() },
+						);
+
+						// API returns array of transcriptions for this file
+						const transcriptions = Array.isArray(response) ? response : response.items || [];
+						
+						if (transcriptions.length === 0) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`No transcriptions found for file ID: ${fileId}. Make sure the transcription has been created.`,
+								{ itemIndex: i },
+							);
+						}
+
+						// Return the latest transcription (or all if multiple)
+						transcriptions.forEach((transcription: IDataObject) => {
+							returnData.push({ json: transcription });
+						});
 					}
 
 					else if (operation === 'getAll') {

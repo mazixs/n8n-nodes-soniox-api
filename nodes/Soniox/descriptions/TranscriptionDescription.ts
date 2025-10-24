@@ -22,8 +22,14 @@ export const transcriptionOperations: INodeProperties[] = [
 			{
 				name: 'Get',
 				value: 'get',
-				description: 'Get a transcription',
+				description: 'Get a transcription by ID',
 				action: 'Get a transcription',
+			},
+			{
+				name: 'Get By File',
+				value: 'getByFile',
+				description: 'Get transcription result by file ID',
+				action: 'Get transcription by file',
 			},
 			{
 				name: 'Get All',
@@ -88,14 +94,34 @@ export const transcriptionFields: INodeProperties[] = [
 				name: 'language',
 				type: 'string',
 				default: '',
-				description: 'Language code (e.g., en, es, fr)',
+				description: 'Language code (e.g., en, es, fr, ru)',
+				placeholder: 'en',
+			},
+			{
+				displayName: 'Context',
+				name: 'context',
+				type: 'string',
+				typeOptions: {
+					rows: 4,
+				},
+				default: '',
+				description: 'Additional context to improve transcription accuracy (e.g., domain-specific terms, names)',
+				placeholder: 'Technical terms: API, webhook, JSON',
+			},
+			{
+				displayName: 'Translation Languages',
+				name: 'translationLanguages',
+				type: 'string',
+				default: '',
+				description: 'Comma-separated language codes for translation (e.g., ru,es,fr)',
+				placeholder: 'ru,es,fr',
 			},
 			{
 				displayName: 'Enable Speaker Diarization',
 				name: 'enableSpeakerDiarization',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to enable speaker diarization',
+				description: 'Whether to enable speaker diarization (identify different speakers)',
 			},
 			{
 				displayName: 'Include Non-Final',
@@ -120,6 +146,22 @@ export const transcriptionFields: INodeProperties[] = [
 			},
 		},
 		description: 'The ID of the transcription',
+	},
+	// Get By File operation
+	{
+		displayName: 'File ID',
+		name: 'fileId',
+		type: 'string',
+		default: '',
+		required: true,
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['getByFile'],
+			},
+		},
+		description: 'The file ID to get transcription for',
+		placeholder: '{{$json.fileId}}',
 	},
 	// Get All operation
 	{
