@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-10-24
+
+### Added
+- **Dynamic model loading** — Model selection now loads available models from Soniox API
+  - Added `loadOptionsMethod` for model dropdown
+  - Models are fetched dynamically instead of manual input
+  - Fallback to default models if API request fails
+
+### Changed
+- Model field in Transcription Create operation changed from text input to dropdown
+- Improved user experience with auto-populated model list
+
+### Fixed
+- Users no longer need to manually type model names
+- Reduced errors from typos in model names
+
 ## [0.2.0] - 2025-10-24
 
 ### Added

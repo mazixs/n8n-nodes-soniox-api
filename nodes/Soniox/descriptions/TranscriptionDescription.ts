@@ -55,7 +55,10 @@ export const transcriptionFields: INodeProperties[] = [
 	{
 		displayName: 'Model',
 		name: 'model',
-		type: 'string',
+		type: 'options',
+		typeOptions: {
+			loadOptionsMethod: 'getModels',
+		},
 		default: '',
 		displayOptions: {
 			show: {
@@ -63,8 +66,7 @@ export const transcriptionFields: INodeProperties[] = [
 				operation: ['create'],
 			},
 		},
-		description: 'The model to use for transcription',
-		placeholder: 'e.g., en_v2_lowlatency',
+		description: 'The model to use for transcription (loaded from API)',
 	},
 	{
 		displayName: 'Additional Fields',

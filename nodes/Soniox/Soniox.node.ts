@@ -1,8 +1,10 @@
 import {
 	IExecuteFunctions,
+	ILoadOptionsFunctions,
 	INodeType,
 	INodeTypeDescription,
 	INodeExecutionData,
+	INodePropertyOptions,
 	IDataObject,
 	NodeOperationError,
 } from 'n8n-workflow';
@@ -62,6 +64,34 @@ export class Soniox implements INodeType {
 			...modelOperations,
 			...modelFields,
 		],
+	};
+
+	methods = {
+		loadOptions: {
+			async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				try {
+					const response = await sonioxApiRequest.call(
+						this,
+						'GET',
+						'/models',
+					);
+
+					const models = Array.isArray(response) ? response : response.models || [];
+
+					return models.map((model: IDataObject) => ({
+						name: (model.name as string) || (model.model_id as string) || String(model),
+						value: (model.model_id as string) || (model.name as string) || String(model),
+						description: model.description as string,
+					}));
+				} catch {
+					// Fallback if API fails
+					return [
+						{ name: 'en_v2_lowlatency', value: 'en_v2_lowlatency', description: 'English v2 Low Latency' },
+						{ name: 'en_v2', value: 'en_v2', description: 'English v2' },
+					];
+				}
+			},
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
