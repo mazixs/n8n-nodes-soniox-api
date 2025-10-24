@@ -50,8 +50,15 @@ jobs:
         if: github.event_name == 'release'
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          echo "Setting version to $VERSION"
-          npm version $VERSION --no-git-tag-version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          echo "Target version: $VERSION"
+          if [ "$CURRENT_VERSION" != "$VERSION" ]; then
+            echo "Updating version to $VERSION"
+            npm version $VERSION --no-git-tag-version
+          else
+            echo "Version already matches, skipping update"
+          fi
           
       - name: Update version from input
         if: github.event_name == 'workflow_dispatch'
