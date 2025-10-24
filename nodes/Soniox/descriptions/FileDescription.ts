@@ -1,4 +1,5 @@
 import { INodeProperties } from 'n8n-workflow';
+import { API_LIMITS } from '../constants';
 
 export const fileOperations: INodeProperties[] = [
 	{
@@ -112,9 +113,9 @@ export const fileFields: INodeProperties[] = [
 		},
 		typeOptions: {
 			minValue: 1,
-			maxValue: 100,
+			maxValue: API_LIMITS.MAX_ITEMS_PER_REQUEST,
 		},
-		default: 50,
+		default: API_LIMITS.DEFAULT_LIMIT,
 		description: 'Max number of results to return',
 	},
 ];

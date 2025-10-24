@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-10-24
+
+### Added
+- **Retry logic** with exponential backoff for API requests
+  - Automatic retry for codes: 408, 429, 500, 502, 503, 504
+  - Retry on network errors (ETIMEDOUT, ECONNRESET)
+  - Smart rate limiting handling with `Retry-After` header
+  - Configurable via constants (max 3 retries, 1s-10s backoff)
+- **Request timeouts**
+  - 30s timeout for regular API requests
+  - 60s timeout for file uploads
+- **Constants system** (`nodes/Soniox/constants.ts`)
+  - `API_LIMITS` — request limits (100, 50)
+  - `CONTENT_TYPES` — MIME types centralized
+  - `RETRY_CONFIG` — retry behavior settings
+  - `TIMEOUTS` — request timeout configuration
+  - `RETRYABLE_STATUS_CODES` — HTTP codes for retry
+
+### Changed
+- **Authentication refactored**
+  - Migrated from manual header setup to `requestWithAuthentication`
+  - Removed duplicate Authorization header configuration
+  - Better integration with n8n credentials system
+- **All hardcoded values replaced with constants**
+  - Pagination limits now use `API_LIMITS.PAGINATION_LIMIT`
+  - MIME types now use `CONTENT_TYPES.*`
+  - Improved code maintainability and configurability
+
+### Fixed
+- Fixed duplicate Authorization header (was set in 2 places)
+- Removed all hardcoded magic numbers and strings
+- Improved error handling for API requests
+
+### Documentation
+- Added `docs/REFACTORING-RESULTS.md` with complete refactoring report
+- Documented remaining tasks (medium and low priority)
+- Added migration guide for constants usage
+
+## [0.1.1] - 2025-10-10
+
+### Security
+- **Critical:** Fixed form-data vulnerability (GHSA-fjxv-7rqg-78g4)
+- **High:** Fixed braces vulnerability through gulp update
+- Fixed 16 security vulnerabilities (7 moderate, 4 high, 5 critical)
+
+### Changed
+- **Major updates:**
+  - Updated `eslint` from 8.57 to 9.37 (migrated to flat config)
+  - Updated `@typescript-eslint/eslint-plugin` from 5.62 to 8.46
+  - Updated `@typescript-eslint/parser` from 5.62 to 8.46
+  - Updated `@types/node` from 18.x to 22.x
+  - Updated `typescript` from 5.1.6 to 5.9.3
+- **Other updates:**
+  - Updated `gulp` from 4.0.2 to 5.0.1
+  - Updated `n8n-workflow` from "latest" to ^1.112.0
+  - Updated `n8n-core` from "latest" to ^1.113.0
+
+### Added
+- GitHub Actions workflows for CI/CD automation
+- Automated release and npm publishing pipeline
+- Documentation for CI/CD process
+- Security update documentation
+- `peerDependencies` for n8n-workflow
+- `overrides` for form-data to enforce secure version
+- New ESLint 9 flat config format (`eslint.config.mjs`)
+
+### Removed
+- Dependabot configuration (removed to reduce notification noise)
+- Old `.eslintrc.js` (replaced with `eslint.config.mjs`)
+
+### Fixed
+- Replaced "latest" versions with pinned versions for better stability
+- All gulp 5.x compatibility issues resolved
+- ESLint 9 migration completed successfully
+
 ## [0.1.0] - 2025-10-08
 
 ### Added

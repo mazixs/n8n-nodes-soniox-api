@@ -2,24 +2,45 @@
 
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-soniox-api.svg)](https://www.npmjs.com/package/n8n-nodes-soniox-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![n8n Community Node](https://img.shields.io/badge/n8n-Community%20Node-blue)](https://docs.n8n.io/integrations/community-nodes/)
 
-n8n community node для интеграции с [Soniox Speech-to-Text API](https://soniox.com/) — высокоточной системой распознавания речи.
+This is an n8n community node that integrates [Soniox Speech-to-Text API](https://soniox.com/) — a high-accuracy speech recognition system.
 
-## 📦 Установка
+[n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
-### В n8n через UI
+[Installation](#installation) ·
+[Operations](#operations) ·
+[Credentials](#credentials) ·
+[Usage](#usage) ·
+[Resources](#resources)
 
-1. Settings → Community Nodes → Install
-2. Введите: `n8n-nodes-soniox-api`
-3. Перезапустите n8n
+## Installation
 
-### Через npm
+### n8n Community Nodes
+
+1. Go to **Settings → Community Nodes** in your n8n instance
+2. Click **Install** and enter: `n8n-nodes-soniox-api`
+3. Click **Install**
+4. Restart n8n to load the node
+
+### Manual Installation
+
+To get started locally, install the node in your n8n root directory:
 
 ```bash
+cd ~/.n8n
 npm install n8n-nodes-soniox-api
 ```
 
-### Локальная разработка
+For Docker-based n8n installations, add the package to your n8n installation:
+
+```bash
+docker exec -it n8n npm install n8n-nodes-soniox-api
+```
+
+### Development
+
+For local development and testing:
 
 ```bash
 git clone https://github.com/mazixs/n8n-nodes-soniox-api.git
@@ -27,45 +48,49 @@ cd n8n-nodes-soniox-api
 npm install
 npm run build
 npm link
+
+# Link to your n8n installation
+cd ~/.n8n
+npm link n8n-nodes-soniox-api
 ```
 
-Подробнее: [INSTALLATION.md](./INSTALLATION.md)
+## Operations
 
----
-
-## ✨ Возможности
+This node supports the following operations:
 
 ### File Operations
-- **Upload** — загрузка аудио файлов (multipart/form-data)
-- **Get** — получение файла по ID
-- **Get All** — список всех файлов (с пагинацией)
-- **Delete** — удаление файла
+- **Upload** — Upload audio files (multipart/form-data support)
+- **Get** — Retrieve file by ID
+- **Get All** — List all files (with pagination)
+- **Delete** — Delete a file
 
 ### Transcription Operations
-- **Create** — создание транскрипции с настройками:
-  - Выбор модели
-  - Определение языка
+- **Create** — Create transcription with configurable parameters:
+  - Model selection
+  - Language hints
   - Speaker diarization
   - Non-final results
-- **Get** — получение результата транскрипции
-- **Get All** — список всех транскрипций
+- **Get** — Retrieve transcription result by ID
+- **Get All** — List all transcriptions (with pagination)
 
 ### Model Operations
-- **Get All** — список доступных моделей
+- **Get All** — List available speech recognition models
 
----
+## Credentials
 
-## 🚀 Быстрый старт
+### Setting up Credentials
 
-### 1. Настройка Credentials
+1. In n8n, navigate to **Credentials → Add Credential → Soniox API**
+2. Enter your credentials:
+   - **API Key**: Get your API key from [console.soniox.com](https://console.soniox.com/)
+   - **API URL**: `https://api.soniox.com/v1` (default)
+3. Click **Save**
 
-1. Создать credential: **Soniox API**
-2. Получить API Key: [console.soniox.com](https://console.soniox.com/)
-3. Указать API URL: `https://api.soniox.com/v1` (по умолчанию)
+## Usage
 
-### 2. Пример Workflow
+### Basic Workflow Example
 
-**Сценарий:** Загрузка аудио → Транскрипция → Получение результата
+Here's a simple workflow to upload an audio file and transcribe it:
 
 ```
 [Read Binary File] 
@@ -77,90 +102,95 @@ npm link
 [Soniox: Transcription Get]
 ```
 
-**Настройки:**
+### Node Configuration
 
-**Node 1: Read Binary File**
+**1. Read Binary File**
 - Property Name: `data`
 - File Path: `/path/to/audio.mp3`
 
-**Node 2: Soniox File Upload**
+**2. Soniox: File Upload**
 - Resource: `File`
 - Operation: `Upload`
 - Binary Property: `data`
 
-**Node 3: Soniox Transcription Create**
+**3. Soniox: Transcription Create**
 - Resource: `Transcription`
 - Operation: `Create`
 - File ID: `{{ $json.fileId }}`
 - Model: `en_v2_lowlatency`
 
-**Node 4: Soniox Transcription Get**
+**4. Soniox: Transcription Get**
 - Resource: `Transcription`
 - Operation: `Get`
 - Transcription ID: `{{ $json.transcriptionId }}`
 
----
+## Features
 
-## 📖 Документация
+- ✅ **Retry Logic** — Automatic retry with exponential backoff for failed requests
+- ✅ **Rate Limiting** — Smart handling of 429 responses with Retry-After headers
+- ✅ **Timeout Control** — Configurable timeouts for API and file upload operations
+- ✅ **Type Safety** — Full TypeScript implementation with n8n-workflow types
+- ✅ **Error Handling** — Comprehensive error messages for debugging
 
-- **[INSTALLATION.md](./INSTALLATION.md)** — детальная установка и примеры
-- **[CHANGELOG.md](./CHANGELOG.md)** — история изменений
-- **[CONTRIBUTING.md](./CONTRIBUTING.md)** — правила контрибуции
-- **[docs/SPEC.md](./docs/SPEC.md)** — техническая спецификация
+## Resources
 
----
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
+- [Soniox API Documentation](https://soniox.com/docs/stt/api-reference)
+- [Soniox Console](https://console.soniox.com/)
 
-## 🛠️ Development
+## Development
+
+### Build
 
 ```bash
-# Установить зависимости
 npm install
-
-# Режим разработки (watch)
-npm run dev
-
-# Сборка
 npm run build
-
-# Линтинг
-npm run lint
-
-# Автоисправление
-npm run lintfix
 ```
 
-### 🧪 Тестирование
+### Lint
 
-Подробные инструкции по тестированию ноды: **[INSTALLATION.md#тестирование](./INSTALLATION.md#-тестирование)**
-
-**Краткая инструкция:**
 ```bash
-# Сборка и линковка
-npm run build && npm link
+npm run lint
+npm run lintfix  # Auto-fix issues
+```
 
-# Тестирование в локальном n8n
+### Testing
+
+Link the node to your n8n installation:
+
+```bash
+npm run build && npm link
 cd ~/.n8n && npm link n8n-nodes-soniox-api
 n8n start
 ```
 
-См. полный checklist тестирования и troubleshooting в документации.
+Then test the node in your n8n workflows.
+
+## Version History
+
+See [CHANGELOG.md](./CHANGELOG.md) for detailed release notes.
+
+## License
+
+[MIT](LICENSE.md)
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## Author
+
+**mazix**
+- GitHub: [@mazixs](https://github.com/mazixs)
+- npm: [n8n-nodes-soniox-api](https://www.npmjs.com/package/n8n-nodes-soniox-api)
+
+## Support
+
+If you encounter issues or have questions:
+1. Check the [documentation](./docs)
+2. Search [existing issues](https://github.com/mazixs/n8n-nodes-soniox-api/issues)
+3. Create a [new issue](https://github.com/mazixs/n8n-nodes-soniox-api/issues/new) if needed
 
 ---
 
-## 🔗 Ссылки
-
-- [Soniox API Documentation](https://soniox.com/docs/stt/api-reference)
-- [n8n Community Nodes](https://docs.n8n.io/integrations/community-nodes/)
-- [GitHub Repository](https://github.com/mazixs/n8n-nodes-soniox-api)
-
----
-
-## 📄 License
-
-MIT © [mazix](https://github.com/mazixs)
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! См. [CONTRIBUTING.md](./CONTRIBUTING.md)
+**Made with ❤️ for the n8n community**

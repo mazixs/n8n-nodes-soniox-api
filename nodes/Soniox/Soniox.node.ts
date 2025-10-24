@@ -11,6 +11,7 @@ import { fileFields, fileOperations } from './descriptions/FileDescription';
 import { transcriptionFields, transcriptionOperations } from './descriptions/TranscriptionDescription';
 import { modelFields, modelOperations } from './descriptions/ModelDescription';
 import { sonioxApiRequest, sonioxApiRequestAllItems } from './GenericFunctions';
+import { CONTENT_TYPES } from './constants';
 
 export class Soniox implements INodeType {
 	description: INodeTypeDescription = {
@@ -109,7 +110,7 @@ export class Soniox implements INodeType {
 								value: buffer,
 								options: {
 									filename: uploadFileName,
-									contentType: binaryData.mimeType || 'application/octet-stream',
+									contentType: binaryData.mimeType || CONTENT_TYPES.BINARY,
 								},
 							},
 						};

@@ -1,6 +1,6 @@
 # Contributing to n8n-nodes-soniox-api
 
-Спасибо за интерес к проекту! 🎉
+Thank you for your interest in contributing! 🎉
 
 ## 🛠️ Development Setup
 
@@ -66,16 +66,16 @@ n8n-nodes-soniox-api/
 
 ## 📝 Commit Convention
 
-Используем [Conventional Commits](https://www.conventionalcommits.org/):
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-- `feat:` новая функциональность
-- `fix:` исправление бага
-- `docs:` изменения в документации
-- `refactor:` рефакторинг кода
-- `test:` добавление тестов
-- `chore:` обновление зависимостей и т.д.
+- `feat:` new feature
+- `fix:` bug fix
+- `docs:` documentation changes
+- `refactor:` code refactoring
+- `test:` adding tests
+- `chore:` dependency updates, etc.
 
-**Примеры:**
+**Examples:**
 ```
 feat: add support for streaming transcription
 fix: handle binary data validation correctly
@@ -84,29 +84,29 @@ docs: update installation instructions
 
 ## 🐛 Bug Reports
 
-При создании issue укажите:
-- Версию n8n
-- Версию ноды
-- Шаги для воспроизведения
-- Ожидаемое поведение
-- Фактическое поведение
-- Скриншоты (если применимо)
+When creating an issue, please include:
+- n8n version
+- Node version
+- Steps to reproduce
+- Expected behavior
+- Actual behavior
+- Screenshots (if applicable)
 
 ## 💡 Feature Requests
 
-Опишите:
-- Проблему, которую решает фича
-- Предлагаемое решение
-- Альтернативы (если есть)
-- Use case примеры
+Please describe:
+- The problem the feature solves
+- Proposed solution
+- Alternatives (if any)
+- Use case examples
 
 ## 📦 Release Process
 
-1. Обновить версию в `package.json`
-2. Обновить `CHANGELOG.md`
-3. Создать git tag: `git tag v0.x.x`
+1. Update version in `package.json`
+2. Update `CHANGELOG.md`
+3. Create git tag: `git tag v0.x.x`
 4. Push: `git push origin v0.x.x`
-5. Опубликовать в npm: `npm publish`
+5. Publish to npm: `npm publish`
 
 ## 🔗 Resources
 
@@ -116,4 +116,4 @@ docs: update installation instructions
 
 ## 📄 License
 
-MIT License - см. [LICENSE](LICENSE)
+MIT License - see [LICENSE](LICENSE)
