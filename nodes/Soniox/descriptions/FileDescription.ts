@@ -26,10 +26,16 @@ export const fileOperations: INodeProperties[] = [
 				action: 'Get a file',
 			},
 			{
-				name: 'Get All',
+				name: 'List',
+				value: 'list',
+				description: 'List all files',
+				action: 'List files',
+			},
+			{
+				name: 'Get All [Deprecated] → List',
 				value: 'getAll',
-				description: 'Get all files',
-				action: 'Get all files',
+				description: 'Deprecated: Use "List" instead - this will be removed in v0.6.0',
+				action: 'Get all files [Deprecated]',
 			},
 			{
 				name: 'Delete',
@@ -86,7 +92,7 @@ export const fileFields: INodeProperties[] = [
 		},
 		description: 'The ID of the file',
 	},
-	// Get All operation
+	// List operation (supports both 'list' and 'getAll' for backward compatibility)
 	{
 		displayName: 'Return All',
 		name: 'returnAll',
@@ -94,7 +100,7 @@ export const fileFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['file'],
-				operation: ['getAll'],
+				operation: ['list', 'getAll'],
 			},
 		},
 		default: false,
@@ -107,7 +113,7 @@ export const fileFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['file'],
-				operation: ['getAll'],
+				operation: ['list', 'getAll'],
 				returnAll: [false],
 			},
 		},

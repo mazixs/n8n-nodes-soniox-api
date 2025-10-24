@@ -209,7 +209,8 @@ export class Soniox implements INodeType {
 						returnData.push({ json: response });
 					}
 
-					else if (operation === 'getAll') {
+					else if (operation === 'list' || operation === 'getAll') {
+						// Support both 'list' (new) and 'getAll' (deprecated) for backward compatibility
 						const returnAll = this.getNodeParameter('returnAll', i);
 
 						let responseData;
