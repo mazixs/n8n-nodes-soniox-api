@@ -55,6 +55,29 @@ export const transcriptionOperations: INodeProperties[] = [
 ];
 
 export const transcriptionFields: INodeProperties[] = [
+	{
+		displayName: 'Audio Source',
+		name: 'source',
+		type: 'options',
+		options: [
+			{
+				name: 'Binary Property',
+				value: 'binary',
+			},
+			{
+				name: 'URL',
+				value: 'url',
+			},
+		],
+		default: 'binary',
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['transcribe'],
+			},
+		},
+		description: 'Source of the audio file to transcribe',
+	},
 	// Transcribe operation - Binary Property Name
 	{
 		displayName: 'Binary Property',
@@ -66,9 +89,27 @@ export const transcriptionFields: INodeProperties[] = [
 			show: {
 				resource: ['transcription'],
 				operation: ['transcribe'],
+				source: ['binary'],
 			},
 		},
 		description: 'Name of the binary property containing the audio file',
+	},
+	// Transcribe operation - Audio URL
+	{
+		displayName: 'Audio URL',
+		name: 'fileUrl',
+		type: 'string',
+		default: '',
+		required: true,
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['transcribe'],
+				source: ['url'],
+			},
+		},
+		description: 'URL of the audio file to transcribe. Must be accessible by Soniox servers.',
+		placeholder: 'https://example.com/audio.mp3',
 	},
 	// Transcribe operation - Model
 	{
@@ -161,6 +202,20 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
+				displayName: 'Delete Audio File',
+				name: 'deleteAudioFile',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to delete the uploaded audio file from Soniox servers after transcription completes',
+			},
+			{
+				displayName: 'Delete Transcription',
+				name: 'deleteTranscription',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to delete the transcription from Soniox servers after retrieval. Useful for privacy and staying within API limits.',
+			},
+			{
 				displayName: 'Max Wait Time (seconds)',
 				name: 'maxWaitTime',
 				type: 'number',
@@ -168,7 +223,7 @@ export const transcriptionFields: INodeProperties[] = [
 				description: 'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
 				typeOptions: {
 					minValue: 10,
-					maxValue: 1800,
+					maxValue: 18000,
 				},
 			},
 			{
@@ -344,7 +399,7 @@ export const transcriptionFields: INodeProperties[] = [
 				description: 'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
 				typeOptions: {
 					minValue: 10,
-					maxValue: 1800,
+					maxValue: 18000,
 				},
 			},
 			{
