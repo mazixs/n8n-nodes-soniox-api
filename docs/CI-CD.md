@@ -1,258 +1,255 @@
 # CI/CD Pipeline Documentation
 
-## Обзор
+## Overview
 
-Проект использует GitHub Actions для автоматизации процессов:
-- Continuous Integration (проверка кода)
-- Автоматическая публикация в npm
-- Управление релизами и версиями
+This project relies on GitHub Actions to automate the following processes:
+- Continuous Integration (linting + build verification)
+- Automatic publishing to npm
+- Release/version orchestration
 
 ---
 
 ## Workflows
 
-### 1. `ci.yml` - Continuous Integration
+### 1. `ci.yml` – Continuous Integration
 
-**Триггеры:**
-- Push в ветки `main` или `develop`
-- Pull requests в эти ветки
+**Triggers:**
+- Pushes to `main` or `develop`
+- Pull requests targeting these branches
 
-**Шаги:**
-1. Checkout кода
-2. Установка Node.js 22 (LTS)
-3. Установка зависимостей (`npm ci`)
-4. Линтинг (`npm run lint`)
-5. Сборка (`npm run build`)
-6. Проверка структуры `dist/`
+**Steps:**
+1. Check out the repository
+2. Install Node.js 22 (LTS)
+3. Install dependencies via `npm ci`
+4. Lint the source (`npm run lint`)
+5. Build the package (`npm run build`)
+6. Verify the `dist/` directory exists
 
-**Цель:** Обеспечить качество кода перед слиянием
-
----
-
-### 2. `create-release.yml` - Создание релиза
-
-**Триггер:** Ручной запуск (`workflow_dispatch`)
-
-**Параметры:**
-- `version` - версия релиза (например, `0.1.1`)
-- `prerelease` - флаг пре-релиза (boolean)
-
-**Шаги:**
-1. Валидация формата версии (Semantic Versioning)
-2. Проверка существования тега
-3. Обновление `package.json` с новой версией
-4. Извлечение заметок из `CHANGELOG.md`
-5. Commit и push изменений
-6. Создание и push git tag `vX.Y.Z`
-7. Создание GitHub Release
-
-**Выходные данные:**
-- Git tag: `vX.Y.Z`
-- GitHub Release с описанием из CHANGELOG
-
-**Триггерит:** Запускает `publish.yml` при создании релиза
+**Goal:** keep code quality high before merging
 
 ---
 
-### 3. `publish.yml` - Публикация в npm
+### 2. `create-release.yml` – Release creation
 
-**Триггеры:**
-- Создание GitHub Release (`release: published`)
-- Ручной запуск с указанием версии
+**Trigger:** Manual run (`workflow_dispatch`).
 
-**Шаги:**
-1. Checkout кода с полной историей
-2. Установка Node.js 22 с настройкой npm registry
-3. Установка зависимостей (`npm ci`)
-4. Линтинг (`npm run lint`)
-5. Сборка (`npm run build`)
-6. Проверка директории `dist/`
-7. Обновление версии из тега или input
-8. Публикация в npm (`npm publish --access public`)
-9. Создание релиз-ветки `release/vX.Y.Z`
+**Inputs:**
+- `version` – target version (e.g., `0.6.1`)
+- `prerelease` – boolean flag to mark the release as pre-release
 
-**Требования:**
-- GitHub Secret: `NPM_TOKEN`
-- Права на публикацию пакета в npm
+**Steps:**
+1. Validate version format (Semantic Versioning)
+2. Ensure the tag does not already exist
+3. Update `package.json` (and lockfile) with the new version
+4. Extract release notes from `CHANGELOG.md`
+5. Commit & push the version bump
+6. Create and push git tag `vX.Y.Z`
+7. Create the GitHub Release with extracted notes
 
-**Результат:**
-- Пакет опубликован на [npmjs.com](https://www.npmjs.com/package/n8n-nodes-soniox-api)
-- Создана ветка `release/vX.Y.Z`
+**Outputs:**
+- Git tag `vX.Y.Z`
+- GitHub Release populated with CHANGELOG text
+
+**Downstream:** creating a release automatically triggers `publish.yml`
 
 ---
 
-## Секреты GitHub
+### 3. `publish.yml` – npm publishing
 
-### Необходимые секреты
+**Triggers:**
+- GitHub Release of type `published`
+- Manual dispatch with `version` input
 
-| Секрет | Описание | Где получить |
-|--------|----------|--------------|
-| `NPM_TOKEN` | Токен для публикации | [npmjs.com → Settings → Access Tokens](https://www.npmjs.com/settings/~/tokens) |
-| `GITHUB_TOKEN` | Автоматически предоставляется GitHub Actions | - |
+**Steps:**
+1. Check out repository with full history
+2. Install Node.js 22 and configure npm registry auth
+3. Install dependencies (`npm ci`)
+4. Lint (`npm run lint`)
+5. Build (`npm run build`)
+6. Confirm `dist/` exists
+7. Align `package.json` version with the release tag or manual input
+8. Publish to npm via `npm publish --access public`
+9. Create a release branch `release/vX.Y.Z`
 
-### Настройка NPM_TOKEN
+**Requirements:**
+- GitHub secret `NPM_TOKEN`
+- Publish access to the npm package namespace
 
-1. Войдите на [npmjs.com](https://www.npmjs.com/)
-2. Перейдите: Account → Access Tokens → Generate New Token
-3. Тип токена: **Automation** (для CI/CD)
-4. Скопируйте токен (показывается только один раз)
-5. Добавьте в GitHub:
-   - Settings → Secrets and variables → Actions
-   - New repository secret
+**Result:**
+- Package available on [npmjs.com](https://www.npmjs.com/package/n8n-nodes-soniox-api)
+- Release branch `release/vX.Y.Z` pushed to the repo
+
+---
+
+## GitHub secrets
+
+### Required secrets
+
+| Secret | Purpose | Where to get it |
+|--------|---------|-----------------|
+| `NPM_TOKEN` | Auth token for `npm publish` | [npmjs.com → Settings → Access Tokens](https://www.npmjs.com/settings/~/tokens) |
+| `GITHUB_TOKEN` | Auto-injected by GitHub Actions | Provided per workflow |
+
+### Configuring `NPM_TOKEN`
+
+1. Log into [npmjs.com](https://www.npmjs.com/)
+2. Navigate to **Account → Access Tokens → Generate New Token**
+3. Choose the **Automation** token type (intended for CI/CD)
+4. Copy the token (only shown once)
+5. Add it to GitHub: Settings → Secrets and variables → Actions → *New repository secret*
    - Name: `NPM_TOKEN`
-   - Value: `<ваш_токен>`
+   - Value: `<your_token>`
 
 ---
 
-## Процесс релиза
+## Release process
 
-### Стандартный процесс
+### Standard flow
 
 ```
-1. Разработка в feature ветках
-   └─> Pull Request в develop/main
-       └─> CI проверяет код
-           └─> Merge при успешных проверках
+1. Develop in feature branches
+   └─> open PR into develop/main
+       └─> CI validates the code
+           └─> merge once checks pass
 
-2. Подготовка к релизу
-   └─> Обновление CHANGELOG.md
-       └─> Создание релиза (create-release.yml)
-           └─> Создание GitHub Release
-               └─> Автоматическая публикация (publish.yml)
-                   └─> Пакет доступен в npm
+2. Prepare for release
+   └─> update CHANGELOG.md
+       └─> run create-release.yml
+           └─> GitHub Release generated
+               └─> publish.yml runs automatically
+                   └─> package appears on npm
 ```
 
 ### Semantic Versioning
 
-- **MAJOR** (1.0.0): Breaking changes
-- **MINOR** (0.1.0): Новые функции (обратная совместимость)
-- **PATCH** (0.0.1): Исправления багов
+- **MAJOR** (`1.0.0`): breaking changes
+- **MINOR** (`0.6.0`): new backwards-compatible features
+- **PATCH** (`0.6.1`): bug fixes only
 
-**Примеры:**
-- `0.1.0` → `0.1.1` (bug fix)
-- `0.1.0` → `0.2.0` (новая функция)
-- `0.1.0` → `1.0.0` (breaking change)
+**Examples:**
+- `0.6.0 → 0.6.1` (bug fix)
+- `0.6.0 → 0.7.0` (new functionality)
+- `0.6.0 → 1.0.0` (breaking change)
 
 ---
 
-## Структура веток
+## Branch structure
 
 ```
 main/
-  ├── develop (разработка)
-  ├── feature/* (новые функции)
-  ├── release/v* (релизы, автоматически)
-  └── hotfix/* (срочные исправления)
+  ├── develop (ongoing development)
+  ├── feature/* (new functionality)
+  ├── release/v* (auto-created during publish)
+  └── hotfix/* (urgent fixes)
 ```
 
-**Стратегия:**
-- `main` - стабильная версия
-- `develop` - текущая разработка
-- `release/vX.Y.Z` - создаются автоматически при публикации
+**Strategy:**
+- `main` – stable production branch
+- `develop` – integration branch for work in progress
+- `release/vX.Y.Z` – created automatically per release
 
 ---
 
-## Локальная разработка
+## Local development
 
-### Проверка перед коммитом
+### Pre-commit checklist
 
 ```bash
-# Линтинг
+# Lint
 npm run lint
 
-# Автоисправление
+# Autofix lint violations
 npm run lintfix
 
-# Сборка
+# Build TypeScript + assets
 npm run build
 
-# Проверка package.json
+# Dry-run npm pack artifact
 npm pack --dry-run
 ```
 
-### Тестирование CI локально
+### Replaying CI locally
 
 ```bash
-# Установить act (https://github.com/nektos/act)
-brew install act  # macOS
-# или
+# Install act (https://github.com/nektos/act)
+brew install act   # macOS
 sudo apt install act  # Linux
 
-# Запустить CI workflow локально
+# Run CI workflow locally
 act -j lint-and-build
 ```
 
 ---
 
-## Мониторинг и отладка
+## Monitoring & troubleshooting
 
-### Проверка статуса workflows
+### Checking workflow status
 
-1. **GitHub UI:**
+1. **GitHub UI**
    - Repository → Actions
-   - Выберите workflow
-   - Просмотр логов каждого шага
+   - Select the workflow run
+   - Inspect step-by-step logs
 
-2. **GitHub CLI:**
+2. **GitHub CLI**
    ```bash
-   # Список запусков
+   # List runs
    gh run list
-   
-   # Просмотр логов
+
+   # Inspect logs
    gh run view <run-id> --log
    ```
 
-### Частые проблемы
+### Frequent issues
 
-**Проблема:** `npm publish 403 Forbidden`
+**Issue:** `npm publish 403 Forbidden`
 
-**Причины:**
-- NPM_TOKEN недействителен
-- Нет прав на публикацию пакета
-- Пакет с такой версией уже существует
+**Causes:**
+- `NPM_TOKEN` expired or revoked
+- Account lacks publish rights to the package
+- Version already published
 
-**Решение:**
+**Fix:**
 ```bash
-# Проверить версию пакета в npm
+# Inspect published versions
 npm view n8n-nodes-soniox-api versions
 
-# Создать новый токен на npmjs.com
-# Обновить NPM_TOKEN в GitHub Secrets
+# Rotate your npm Automation token
+# Update NPM_TOKEN in GitHub secrets
 ```
 
 ---
 
-**Проблема:** `Build failed` в CI
+**Issue:** `Build failed` in CI
 
-**Причины:**
-- Ошибки линтинга
-- TypeScript ошибки
-- Отсутствующие зависимости
+**Causes:**
+- Lint failures
+- TypeScript compilation errors
+- Missing dependencies
 
-**Решение:**
+**Fix:**
 ```bash
-# Локально проверить
+# Reproduce locally
 npm ci
 npm run lint
 npm run build
 
-# Проверить git status
+# Confirm repo state
 git status
 ```
 
 ---
 
-**Проблема:** Релиз создан, но пакет не опубликован
+**Issue:** Release exists but package is missing on npm
 
-**Причины:**
-- Ошибка в publish workflow
-- NPM_TOKEN истёк
+**Causes:**
+- Failure inside `publish.yml`
+- `NPM_TOKEN` expired
 
-**Решение:**
-1. Проверить логи workflow `publish.yml`
-2. Ручная публикация:
+**Fix:**
+1. Inspect `publish.yml` logs
+2. Publish manually if needed:
    ```bash
-   git checkout v0.1.1
+   git checkout v0.6.1
    npm ci
    npm run build
    npm publish --access public
@@ -260,14 +257,14 @@ git status
 
 ---
 
-## Best Practices
+## Best practices
 
-1. **Всегда обновляйте CHANGELOG.md** перед релизом
-2. **Тестируйте локально** перед push
-3. **Используйте pre-release** для тестовых версий
-4. **Следуйте Semantic Versioning**
-5. **Не пропускайте CI проверки**
-6. **Документируйте breaking changes** в CHANGELOG
+1. Update `CHANGELOG.md` before every release
+2. Test locally before pushing
+3. Use pre-releases for testing in production-like environments
+4. Respect Semantic Versioning rules
+5. Never skip CI checks
+6. Document breaking changes explicitly in the changelog
 
 ---
 

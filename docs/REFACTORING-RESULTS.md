@@ -1,36 +1,36 @@
-# Результаты Рефакторинга и Аудита (v0.6.0)
+# Refactoring & Audit Results (v0.6.0)
 
-**Дата:** 23 января 2026
-**Версия:** 0.6.0
-**Статус:** ✅ Внедрено в Production
-
----
-
-## 🏗 Архитектурные изменения
-
-### 1. Модульность (Separation of Concerns)
-Монолитный метод `execute` в `Soniox.node.ts` был разделен на специализированные обработчики:
-- **`handlers/FileHandler.ts`**: Отвечает за загрузку, получение списка и удаление файлов. Реализует потоковую передачу.
-- **`handlers/TranscriptionHandler.ts`**: Управляет жизненным циклом транскрипции (создание, ожидание, получение результата, очистка).
-- **`handlers/ModelHandler.ts`**: Получает список доступных моделей.
-
-### 2. Потоковая загрузка (Streaming Uploads)
-**Проблема:** Ранее файлы загружались в память (Buffer) целиком, что вызывало OOM (Out Of Memory) на больших файлах (>200MB).
-**Решение:** Реализована поддержка `Readable` потоков через `helpers.getBinaryStream(binaryData.id)`. Данные передаются в `form-data` без полной загрузки в RAM.
-**Результат:** Стабильная работа с файлами до 1GB (лимит API).
-
-### 3. Native Support & Modernization
-- **ES2022**: Проект переведен на target `ES2022` для использования современных возможностей Node.js.
-- **Strict TypeScript**: Включен строгий режим, убраны `any`, добавлены корректные типы для всех параметров.
-- **Cleanup**: Удалены рудиментарные файлы (`TODO.md`, старые планы).
+**Date:** 23 January 2026
+**Version:** 0.6.0
+**Status:** ✅ Deployed to production
 
 ---
 
-## 🛡 Безопасность и Зависимости
+## 🏗 Architectural changes
 
-### 1. Устранение уязвимостей
-Проведен аудит зависимостей и выявлены критические уязвимости в транзитивных пакетах (`qs`, `lodash`, `jws`, `@langchain/core`).
-**Решение:** В `package.json` добавлена секция `overrides`:
+### 1. Modularity (Separation of Concerns)
+The monolithic `execute` method in `Soniox.node.ts` was split into dedicated handlers:
+- **`handlers/FileHandler.ts`** – uploads, lists, and deletes files using streaming.
+- **`handlers/TranscriptionHandler.ts`** – drives the transcription lifecycle (create, poll, fetch result, cleanup).
+- **`handlers/ModelHandler.ts`** – fetches available models.
+
+### 2. Streaming uploads
+**Issue:** files were read fully into memory buffers, triggering OOM for large inputs (>200 MB).
+**Fix:** leverage `Readable` streams via `helpers.getBinaryStream(binaryData.id)` to pipe binary data into `form-data` without loading everything into RAM.
+**Result:** stable uploads up to the Soniox API limit (1 GB).
+
+### 3. Native support & modernization
+- **ES2022** target unlocks modern Node.js features.
+- **Strict TypeScript**: enabled strict mode, removed `any`, and typed every parameter.
+- **Cleanup**: deprecated files (`TODO.md`, legacy plans) removed.
+
+---
+
+## 🛡 Security & dependencies
+
+### 1. Vulnerability mitigation
+Dependency audit revealed critical issues in transitive packages (`qs`, `lodash`, `jws`, `@langchain/core`).
+**Fix:** added an `overrides` block in `package.json`:
 ```json
 "overrides": {
   "form-data": "^4.0.4",
@@ -40,32 +40,32 @@
   "@langchain/core": "^0.3.80"
 }
 ```
-**Результат:** `npm audit` показывает 0 уязвимостей.
+**Outcome:** `npm audit` now reports zero vulnerabilities.
 
-### 2. Гигиена проекта
-- Обновлен `.npmignore`: исключены конфиги линтеров, документация, github-файлы.
-- Обновлен `.gitignore`: убраны несуществующие шаблоны.
-
----
-
-## ⚙️ Новые Функции
-
-### 1. Стратегии Очистки (Auto-Cleanup)
-Добавлены опции для автоматического удаления данных с серверов Soniox:
-- **Delete Audio File**: Удаляет файл сразу после запуска транскрипции (экономия хранилища).
-- **Delete Transcription**: Удаляет транскрипцию после успешного получения результата (приватность).
-
-### 2. Поддержка Audio URL
-Теперь `Transcribe` операция поддерживает не только бинарные файлы, но и прямые ссылки (`audio_url`).
-
-### 3. Увеличенные лимиты
-- `maxWaitTime` увеличен до **300 минут** (было 60 минут), чтобы соответствовать лимитам API для длинных файлов.
+### 2. Project hygiene
+- `.npmignore` updated to exclude lint configs, docs, and GitHub metadata.
+- `.gitignore` trimmed from stale patterns.
 
 ---
 
-## ✅ Статус проверки
-- **Build**: `npm run build` — Успешно.
-- **Lint**: `npm run lint` — Успешно (0 ошибок).
-- **Security**: `npm audit` — Чисто.
+## ⚙️ New features
 
-Этот рефакторинг обеспечивает принцип "Zero Technical Debt" и подготавливает ноду к стабильной работе в production окружениях.
+### 1. Auto-cleanup strategies
+New switches remove Soniox-side data automatically:
+- **Delete Audio File** – removes the source file right after the transcription job is created (storage hygiene).
+- **Delete Transcription** – wipes the transcription object after results are retrieved (privacy).
+
+### 2. Audio URL support
+`Transcribe` now accepts both binary attachments and public URLs via `audio_url`.
+
+### 3. Extended limits
+- `maxWaitTime` bumped to **300 minutes** (from 60) to match Soniox limits for long recordings.
+
+---
+
+## ✅ Verification status
+- **Build:** `npm run build` – ✅
+- **Lint:** `npm run lint` – ✅ (0 errors)
+- **Security:** `npm audit` – clean
+
+The refactor enforces a “Zero Technical Debt” posture and readies the node for dependable production usage.

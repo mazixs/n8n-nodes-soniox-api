@@ -1,7 +1,7 @@
 # Soniox API Official Documentation
 
-**Source:** https://soniox.com/docs/stt/  
-**Retrieved:** 2025-10-25 via MCP Context7
+**Sources:** https://soniox.com/docs/stt/ , https://soniox.com/blog/2025-10-21-soniox-v3/  
+**Retrieved:** 2026-01-23 via MCP Context7 & Exa
 
 ---
 
@@ -10,6 +10,18 @@
 Soniox Speech-to-Text API delivers highly accurate, scalable audio transcription through REST and WebSocket APIs.
 
 **Base URL:** `https://api.soniox.com/v1`
+
+---
+
+## CI/CD Workflow Readiness Snapshot (2026-01-23)
+
+| Workflow | Trigger | Coverage Highlights | Gaps / Actions |
+|----------|---------|---------------------|----------------|
+| `.github/workflows/ci.yml` | `push`, `pull_request` on `main` & `develop` | Node.js 22 matrix, caches npm, runs `npm ci`, `npm run lint`, `npm run build`, asserts `dist` presence | No automated tests; uses `actions/checkout@v6` / `setup-node@v6` (verify availability or pin to stable major); consider artifact upload for built dist |
+| `.github/workflows/create-release.yml` | manual `workflow_dispatch` | Validates version format, ensures tag uniqueness, bumps package version, extracts changelog, pushes tag + GitHub release | `awk` changelog extraction fails if release at EOF with no next header; force pushes can race with manual releases; does not regenerate dist before tagging |
+| `.github/workflows/publish.yml` | GitHub Release `published` or manual `workflow_dispatch` | Rebuilds package, syncs version from tag/input, runs lint/build before `npm publish`, supports manual publish for hotfix | Lacks provenance/signature, does not run tests, release branch creation duplicates if rerun; ensure `NODE_AUTH_TOKEN` scoped to publish only |
+
+> Outcome: workflows are structurally ready but require (1) confirmation of action versions, (2) automated tests/artifact handling, (3) hardened changelog + publish safeguards before GA.
 
 ---
 
@@ -45,21 +57,25 @@ file: <binary_data>
 - `Authorization: Bearer <SONIOX_API_KEY>`
 - `Content-Type: application/json`
 
-**Request Body:**
+**Request Body (key fields):**
 ```json
 {
-  "model": "stt-async-preview",           // Required
-  "file_id": "uuid-from-upload",          // Option 1: Uploaded file
-  // OR
-  "audio_url": "https://example.com/audio.mp3",  // Option 2: Public URL
-  
-  // Optional parameters
-  "language_hints": ["en", "ru"],         // Language detection hints
-  "context": "Medical terminology...",    // Domain context
-  "enable_speaker_diarization": true,     // Speaker identification
-  "enable_language_identification": true, // Per-token language detection
-  "webhook_url": "https://...",           // Completion webhook
-  "client_reference_id": "my-id-123"      // Your tracking ID
+  "model": "stt-async-v3",                // Required (32-char max)
+  "file_id": "uuid-from-upload",          // Option 1: Uploaded file (mutually exclusive with audio_url)
+  "audio_url": "https://example.com/audio.mp3",  // Option 2: Public URL (https only)
+
+  "language_hints": ["en", "ru"],         // Up to 16 entries; add language_hints_strict for hard filtering
+  "translation": {                         // Optional translation block
+    "type": "one_way",
+    "target_language": "es"
+  },
+  "context": "Medical terminology...",    // Nested object accepted; 10k chars soft cap
+  "enable_speaker_diarization": true,
+  "enable_language_identification": true,
+  "webhook_url": "https://...",
+  "webhook_auth_header_name": "Authorization",
+  "webhook_auth_header_value": "Bearer <secret>",
+  "client_reference_id": "my-id-123"
 }
 ```
 
@@ -172,7 +188,7 @@ file: <binary_data>
 **From:** https://soniox.com/docs/stt/async/error-handling
 
 ### File Upload
-- **Max duration:** 60 minutes (300 minutes coming soon)
+- **Max duration:** 300 minutes (fixed)
 - **Storage quota:** Account-specific
 - **File count quota:** Account-specific
 
@@ -221,47 +237,62 @@ Authorization: Bearer <API_KEY>
 }
 ```
 
+----
+
+## Critical Operating Limits (Async + Real-time)
+
+| Area | Default Limit | Notes |
+|------|---------------|-------|
+| Uploaded files | 1,000 | Includes all non-deleted uploads |
+| File storage | 10 GB total | Delete files after transcription; Soniox never auto-purges |
+| Audio duration (async + RT) | 300 minutes | Hard ceiling per file/stream |
+| Pending async jobs | 100 | Additional requests fail with `429` |
+| Total async jobs | 2,000 (pending + completed + failed) | Clean up old jobs via `DELETE /v1/transcriptions/{id}` |
+| Real-time requests per minute | 100 | Across WebSocket start requests |
+| Concurrent WebSocket sessions | 10 | Includes idle connections; close aggressively |
+
+Limit increases (except duration) require Soniox Console tickets.
+
 ---
 
-## Best Practices
+## Webhook Delivery & Reliability
 
-### 1. Polling Interval
-- **Recommended:** 5 seconds
-- **Minimum:** 1 second
-- Respect rate limits
+- Soniox POSTs `{ id, status }` to `webhook_url` when a job completes or errors.
+- Set optional `webhook_auth_header_name/value` for HMAC-style gatekeeping.
+- Retries happen automatically for transient failures; log transcription IDs locally for manual recovery via REST if webhook retries exhaust.
+- Append query parameters to the `webhook_url` to embed metadata (e.g., `?tenant=acme&job=123`).
 
-### 2. Timeout
-- **Short files (<1 min):** 30-60 seconds
-- **Long files (>10 min):** 5-10 minutes
-- File length affects processing time
+---
 
-### 3. Webhooks (Alternative to Polling)
-Set `webhook_url` when creating transcription to receive completion notification:
+## Translation & Context Enhancements
 
-```json
-{
-  "webhook_url": "https://your-server.com/webhook",
-  "webhook_auth_header_name": "Authorization",
-  "webhook_auth_header_value": "Bearer your-secret"
-}
-```
+| Feature | Parameter | Impact |
+|---------|-----------|--------|
+| One-way translation | `translation.type = "one_way"`, `target_language` | Adds translated transcript per token |
+| Two-way translation | `translation.type = "two_way"`, `language_a`, `language_b` | Enables bilingual meetings |
+| Domain context | `context` object | Accepts structured key/value for acronyms, product catalogues |
+| Vocabulary hints | `context.terms` (array) | Boosts custom words without global language lock |
+| Client refs | `client_reference_id` | Persist cross-system IDs; returned in webhook + status |
 
-**Webhook Payload:**
-```json
-{
-  "transcription_id": "73d4357d...",
-  "status": "completed",
-  "event": "transcription.completed"
-}
-```
+---
 
-### 4. Cleanup
-Delete completed transcriptions to free quota:
+## Real-time (WebSocket) Cheat Sheet
 
-```http
-DELETE /v1/transcriptions/{transcription_id}
-Authorization: Bearer <API_KEY>
-```
+- **Endpoint:** `wss://stt-rt.soniox.com/transcribe-websocket`
+- **Handshake payload:** `{ "api_key": "...", "model": "stt-rt-v3", "audio_format": "auto", "language_hints": ["en"], ... }`
+- Streams send binary audio frames; send empty frame to finalize. Server replies with incremental tokens containing `text`, `start_ms`, `end_ms`, `speaker`, `language`, `translation_status`.
+- Error codes mirror HTTP (400 bad config, 401 auth, 402 billing, 408 timeout, 429 limits, 503 restart required). Close + reopen when receiving `finished: true` or unrecoverable errors.
+
+---
+
+## Best Practices (2026 Refresh)
+
+1. **Polling discipline:** 5 s interval baseline; cap retries based on `audio_duration_ms`. Back off exponentially after 60 attempts.
+2. **Timeout heuristic:** `job_timeout = max(5 min, audio_duration_ms * 3)` to absorb queueing.
+3. **Webhooks first:** Use webhooks for anything longer than 2 minutes. Keep webhook handlers idempotent.
+4. **Storage hygiene:** Immediately `DELETE /v1/files/{file_id}` and `/v1/transcriptions/{id}` after archiving output to stay under 10 GB / 1,000 file cap.
+5. **Version pinning:** Default to `stt-async-v3` and `stt-rt-v3` for parity between async and streaming results; fall back to preview models only for experimentation.
+6. **Rate-limit safety:** Implement 100 RPM cap client-side; queue or jitter requests to avoid 429 bursts.
 
 ---
 
@@ -325,6 +356,6 @@ if (status === 'completed') {
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2025-10-25  
-**Source:** Official Soniox Documentation via Context7 MCP
+**Document Version:** 1.1  
+**Last Updated:** 2026-01-23  
+**Source:** Official Soniox Documentation via Context7 MCP & Exa

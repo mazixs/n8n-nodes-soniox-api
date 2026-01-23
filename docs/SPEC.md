@@ -1,4 +1,4 @@
-# Техническая Спецификация (v2.0)
+# Technical Specification (v2.0)
 # n8n-nodes-soniox-api
 
 **Version:** 2.0
@@ -7,100 +7,100 @@
 
 ---
 
-## 1. Архитектура
+## 1. Architecture
 
-### 1.1 Структура проекта
-Проект использует модульную архитектуру с разделением ответственности:
+### 1.1 Project structure
+The project follows a modular architecture with clear separation of concerns:
 
 ```
 n8n-nodes-soniox-api/
 ├── credentials/
-│   └── SonioxApi.credentials.ts    # Аутентификация (Bearer Token)
+│   └── SonioxApi.credentials.ts    # Authentication (Bearer token)
 ├── nodes/
 │   └── Soniox/
-│       ├── Soniox.node.ts          # Основной класс ноды (Dispatcher)
-│       ├── GenericFunctions.ts     # Базовые HTTP запросы, retry logic
-│       ├── handlers/               # Бизнес-логика
-│       │   ├── FileHandler.ts      # Загрузка файлов (Streams), Listing
-│       │   ├── TranscriptionHandler.ts # Транскрипция, Polling, Cleanup
-│       │   └── ModelHandler.ts     # Получение моделей
-│       └── descriptions/           # UI описания полей
+│       ├── Soniox.node.ts          # Node dispatcher
+│       ├── GenericFunctions.ts     # Base HTTP helpers & retry logic
+│       ├── handlers/               # Business logic
+│       │   ├── FileHandler.ts      # Upload/list/delete via streams
+│       │   ├── TranscriptionHandler.ts # Transcription, polling, cleanup
+│       │   └── ModelHandler.ts     # Model fetching
+│       └── descriptions/           # UI field definitions
 │           ├── FileDescription.ts
 │           ├── TranscriptionDescription.ts
 │           └── ModelDescription.ts
 ├── docs/                           # Документация
 ├── package.json
-└── tsconfig.json                   # ES2022 Target
+└── tsconfig.json                   # ES2022 target
 ```
 
-### 1.2 Технологический стек
+### 1.2 Tech stack
 - **Runtime:** Node.js 22+
-- **Language:** TypeScript 5.x (Strict Mode)
+- **Language:** TypeScript 5.x (strict mode)
 - **Target:** ES2022
-- **Core Dependencies:** `n8n-workflow`, `n8n-core` (peer dependencies)
-- **Utilities:** Native Node.js APIs (`stream`, `buffer`) - **Zero External Runtime Deps**
+- **Core dependencies:** `n8n-workflow`, `n8n-core` (peer)
+- **Utilities:** Native Node.js APIs (`stream`, `buffer`) – **zero external runtime deps**
 
 ---
 
-## 2. Реализованный Функционал
+## 2. Implemented functionality
 
-### 2.1 File Operations (`FileHandler.ts`)
+### 2.1 File operations (`FileHandler.ts`)
 - **Upload:**
-  - Поддержка `multipart/form-data`.
-  - **Streaming Upload:** Использование `Readable` потоков для файлов любого размера (до 1GB) без OOM.
-  - Авто-определение MIME-типов.
-- **List:** Пагинация и фильтрация загруженных файлов.
-- **Get/Delete:** Управление файлами по ID.
+  - `multipart/form-data` payloads.
+  - **Streaming uploads** via `Readable` streams for inputs up to 1 GB (no OOM risk).
+  - Automatic MIME detection.
+- **List:** pagination & filtering of uploaded files.
+- **Get/Delete:** manage files by ID.
 
-### 2.2 Transcription Operations (`TranscriptionHandler.ts`)
-- **Transcribe (All-in-One):**
-  - Поддержка источников: `Binary Data` или `Audio URL`.
-  - Асинхронный поллинг статуса (`queued` -> `processing` -> `completed`).
-  - `maxWaitTime`: до 300 минут.
-- **Cleanup Strategies:**
-  - `deleteAudioFile`: Удаление исходного файла сразу после постановки в очередь.
-  - `deleteTranscription`: Удаление записи транскрипции после получения результата.
-- **Features:** Speaker Diarization, Translations, Custom Context.
+### 2.2 Transcription operations (`TranscriptionHandler.ts`)
+- **Transcribe (all-in-one):**
+  - Supports `Binary Data` or `audio_url` sources.
+  - Asynchronous polling of statuses (`queued` → `processing` → `completed`).
+  - `maxWaitTime` configurable up to 300 minutes.
+- **Cleanup strategies:**
+  - `deleteAudioFile` removes the source file immediately after queueing.
+  - `deleteTranscription` deletes the transcription once the result is retrieved.
+- **Features:** speaker diarization, translations, custom context injection.
 
-### 2.3 Reliability & Security
-- **Retry Logic:** Exponential backoff для ошибок сети и 429 Rate Limits.
+### 2.3 Reliability & security
+- **Retry logic:** exponential backoff for network failures and 429 rate limits.
 - **Security:**
-  - Отсутствие уязвимых зависимостей (фиксированные версии через `overrides`).
-  - Очистка чувствительных данных из логов.
-  - Strict input validation.
+  - Locked dependency versions via `overrides` to avoid vulnerable transitive packages.
+  - Sensitive payloads scrubbed from logs.
+  - Strict input validation everywhere.
 
 ---
 
-## 3. API Integration Details
+## 3. API integration details
 
 ### 3.1 Authentication
-Используется стандартный механизм n8n credentials:
+Uses the standard n8n credential mechanism:
 - **Header:** `Authorization: Bearer <API_KEY>`
 - **Base URL:** `https://api.soniox.com`
 
-### 3.2 Error Handling
-Централизованная обработка ошибок в `GenericFunctions.ts`:
-- **Network Errors:** Авто-ретрай.
-- **API Errors:** Проброс сообщений от Soniox (`error_message`, `error_type`).
-- **Validation:** Pre-flight проверки (MIME types, Required fields).
+### 3.2 Error handling
+Centralized in `GenericFunctions.ts`:
+- **Network errors:** automatic retries.
+- **API errors:** propagate Soniox response fields (`error_message`, `error_type`).
+- **Validation:** pre-flight checks for MIME types, required fields, etc.
 
 ---
 
-## 4. Development & Build
+## 4. Development & build
 
 ### 4.1 Scripts
-- `npm run build`: Компиляция TS + копирование иконок (Gulp).
-- `npm run lint`: ESLint (Flat Config) проверка.
-- `npm audit`: Проверка уязвимостей.
+- `npm run build` – TypeScript compilation + Gulp icon copy.
+- `npm run lint` – ESLint (flat config).
+- `npm audit` – vulnerability scan.
 
 ### 4.2 Guidelines
-- Использовать "Native Support" (избегать лишних npm пакетов).
-- Строгая типизация (no `any`).
-- Модульность (код в `handlers/`).
+- Prefer native Node capabilities (avoid unnecessary npm deps).
+- Enforce strict typing (no `any`).
+- Keep logic modularized inside `handlers/`.
 
 ---
 
 ## 5. Roadmap
-- [ ] Unit Tests (Jest)
-- [ ] Integration Tests (Live API)
-- [ ] Webhooks support (if Soniox adds them)
+- [ ] Unit tests (Jest)
+- [ ] Integration tests (live API)
+- [ ] Webhook support (pending Soniox features)
