@@ -6,7 +6,6 @@ import {
 } from 'n8n-workflow';
 import { Readable } from 'stream';
 import { sonioxApiRequest, sonioxApiRequestAllItems } from '../GenericFunctions';
-import { CONTENT_TYPES } from '../constants';
 
 export async function transcriptionHandler(
 	this: IExecuteFunctions,
@@ -222,7 +221,7 @@ export async function transcriptionHandler(
 		if (deleteAudioFile && fileId) {
 			try {
 				await sonioxApiRequest.call(this, 'DELETE', `/files/${fileId}`);
-			} catch (error) {
+			} catch {
 				// Ignore cleanup errors to ensure transcription result is returned
 			}
 		}
@@ -231,7 +230,7 @@ export async function transcriptionHandler(
 		if (deleteTranscription && transcriptionId) {
 			try {
 				await sonioxApiRequest.call(this, 'DELETE', `/transcriptions/${transcriptionId}`);
-			} catch (error) {
+			} catch {
 				// Ignore cleanup errors
 			}
 		}
@@ -433,7 +432,7 @@ export async function transcriptionHandler(
 		if (deleteTranscription && transcriptionId) {
 			try {
 				await sonioxApiRequest.call(this, 'DELETE', `/transcriptions/${transcriptionId}`);
-			} catch (error) {
+			} catch {
 				// Ignore cleanup errors
 			}
 		}

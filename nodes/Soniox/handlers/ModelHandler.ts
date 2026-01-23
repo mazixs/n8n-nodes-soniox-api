@@ -8,7 +8,7 @@ import { sonioxApiRequest } from '../GenericFunctions';
 export async function modelHandler(
 	this: IExecuteFunctions,
 	operation: string,
-	i: number,
+	_i: number,
 ): Promise<INodeExecutionData[]> {
 	const returnData: INodeExecutionData[] = [];
 

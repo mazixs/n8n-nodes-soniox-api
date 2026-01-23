@@ -6,8 +6,3 @@ dist/
 *.tgz
 .vscode/
 .idea/
-
-# Temporary files
-TODO.md
-CREATE_AND_WAIT_OPERATION.md
-*.snippet.ts

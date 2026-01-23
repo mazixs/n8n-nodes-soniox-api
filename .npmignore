@@ -3,7 +3,9 @@ node_modules/
 !dist/**/*.d.ts
 tsconfig.json
 .gitignore
-.eslintrc.js
+eslint.config.mjs
+.editorconfig
+.github/
 docs/
 *.md
 !README.md

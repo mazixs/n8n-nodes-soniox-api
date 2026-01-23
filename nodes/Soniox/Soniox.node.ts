@@ -6,7 +6,6 @@ import {
 	INodeExecutionData,
 	INodePropertyOptions,
 	IDataObject,
-	NodeOperationError,
 } from 'n8n-workflow';
 
 import { fileFields, fileOperations } from './descriptions/FileDescription';
