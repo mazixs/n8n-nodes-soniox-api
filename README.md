@@ -1,8 +1,5 @@
 # n8n-nodes-soniox-api
 
-WIP VERSION! NOT FOR PRODUCTION USE!
-Has not working yet!
-
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-soniox-api.svg)](https://www.npmjs.com/package/n8n-nodes-soniox-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![n8n Community Node](https://img.shields.io/badge/n8n-Community%20Node-blue)](https://docs.n8n.io/integrations/community-nodes/)
@@ -10,11 +7,13 @@ Has not working yet!
 This is an n8n community node that integrates [Soniox Speech-to-Text API](https://soniox.com/) — a high-accuracy, multilingual speech recognition system.
 
 **Features:**
-- 🎯 One-node transcription (like Whisper node)
-- 🌍 60+ languages supported
-- 🎭 Speaker diarization
-- 🔄 Real-time translations
-- ⚡ Async processing with auto-polling
+- 🎯 **One-node transcription** (like Whisper node)
+- 🌊 **Streaming Uploads** — Efficiently handle large files without memory issues
+- 🧹 **Auto-Cleanup** — Options to automatically delete files and transcriptions from Soniox servers
+- 🌍 **60+ languages supported**
+- 🎭 **Speaker diarization**
+- 🔄 **Real-time translations**
+- ⚡ **Async processing with auto-polling**
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -85,7 +84,7 @@ npm link n8n-nodes-soniox-api
 - **Get All** — List available speech recognition models
 
 ### Deprecated Operations
-The following operations still work but will be removed in v0.6.0:
+The following operations still work but will be removed in v1.0.0:
 - **Create** → use **Transcribe** instead
 - **Create and Wait** → use **Transcribe** instead
 - **Get By File** → use **Get** instead
@@ -122,6 +121,8 @@ The simplest way to transcribe audio - just **one node**:
   - Context: Domain-specific terms (optional)
   - Translation Languages: `ru,es,fr` (optional)
   - Enable Speaker Diarization: `true` (optional)
+  - Delete Audio File: `true` (default: true) - Clean up file after transcription
+  - Delete Transcription: `true` (default: false) - Delete transcription from server after retrieval
 
 **Output:**
 ```json

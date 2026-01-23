@@ -19,7 +19,7 @@
 
 **Шаги:**
 1. Checkout кода
-2. Установка Node.js 18
+2. Установка Node.js 22 (LTS)
 3. Установка зависимостей (`npm ci`)
 4. Линтинг (`npm run lint`)
 5. Сборка (`npm run build`)
@@ -62,7 +62,7 @@
 
 **Шаги:**
 1. Checkout кода с полной историей
-2. Установка Node.js 18 с настройкой npm registry
+2. Установка Node.js 22 с настройкой npm registry
 3. Установка зависимостей (`npm ci`)
 4. Линтинг (`npm run lint`)
 5. Сборка (`npm run build`)

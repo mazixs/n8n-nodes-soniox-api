@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-01-23
+
+### Maintenance
+- **Build Process:** Cleaned up `gulpfile.js` by removing unused `copyAssets` task.
+- **CI/CD:** Verified compatibility with GitHub Actions `@v6` (checkout/setup-node) and Node.js 22.
+
+## [0.6.0] - 2026-01-23
+
+### Refactored
+- **Core Architecture:** Split monolithic `execute` method into modular handlers (`FileHandler`, `TranscriptionHandler`, `ModelHandler`) for better maintainability and performance.
+- **File Upload:** Implemented **Streaming Uploads** to handle large files efficiently without Out-Of-Memory (OOM) errors.
+- **Codebase:** Full strict TypeScript compliance, removed `any` types, and modernized to ES2022.
+
+### Added
+- **Auto-Cleanup Strategies:**
+  - Added `deleteTranscription` option: Automatically deletes the transcription from Soniox servers after retrieval.
+  - Enhanced `deleteAudioFile` option: Ensures uploaded files are deleted even if transcription fails (best effort).
+- **Audio URL Support:** Native support for `audio_url` in Transcribe operations (previously restricted to binary).
+- **Validation:**
+  - **MIME Type Check:** Pre-flight validation for audio/video MIME types before upload.
+  - **Input Validation:** Stricter checks for file IDs and parameters.
+
+### Improved
+- **Limits:** Increased `maxWaitTime` to **300 minutes** to support long file transcriptions.
+- **Security:**
+  - **Dependency Audit:** Fixed critical vulnerabilities in transitive dependencies (`qs`, `lodash`, etc.) via `overrides`.
+  - **Project Hygiene:** Cleaned up `.npmignore`, `.gitignore`, and removed rudimentary files.
+
+### Fixed
+- **Binary Stream:** Fixed `getBinaryStream` usage to correctly use `binaryData.id`.
+- **Memory Leaks:** Addressed potential memory leaks with stream handling.
+
 ## [0.5.5] - 2025-10-25
 
 ### Fixed

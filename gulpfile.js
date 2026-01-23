@@ -13,20 +13,5 @@ function buildIcons() {
     .pipe(dest('dist/'));
 }
 
-/**
- * Копирует все необходимые файлы с сохранением структуры
- */
-function copyAssets() {
-  return src([
-    'nodes/**/*.{png,svg,jpg}',
-    'credentials/**/*.{png,svg,jpg}',
-    'package.json',
-    'README.md',
-    'LICENSE'
-  ], { base: '.' })
-    .pipe(dest('dist/'));
-}
-
 exports['build:icons'] = buildIcons;
 exports.default = buildIcons;
-exports.copy = copyAssets;
