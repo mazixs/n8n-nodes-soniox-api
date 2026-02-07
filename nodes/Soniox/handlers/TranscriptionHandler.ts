@@ -61,6 +61,57 @@ function buildContextObject(additionalFields: IDataObject): IDataObject | undefi
 	return hasContext ? context : undefined;
 }
 
+/**
+ * Groups tokens by speaker into conversation segments.
+ * Soniox API returns speaker info only in tokens — this function
+ * assembles a readable speaker-segmented output.
+ */
+function buildSpeakerSegments(tokens: IDataObject[]): IDataObject[] {
+	if (!Array.isArray(tokens) || tokens.length === 0) return [];
+
+	const segments: IDataObject[] = [];
+	let currentSpeaker: string | null = null;
+	let currentText = '';
+	let segmentStartMs: number | null = null;
+	let segmentEndMs: number | null = null;
+
+	for (const token of tokens) {
+		const speaker = (token.speaker as string) || 'unknown';
+		const text = (token.text as string) || '';
+
+		if (speaker !== currentSpeaker) {
+			// Flush previous segment
+			if (currentSpeaker !== null && currentText.trim().length > 0) {
+				segments.push({
+					speaker: currentSpeaker,
+					text: currentText.trim(),
+					start_ms: segmentStartMs,
+					end_ms: segmentEndMs,
+				});
+			}
+			currentSpeaker = speaker;
+			currentText = text;
+			segmentStartMs = (token.start_ms as number) ?? null;
+			segmentEndMs = (token.end_ms as number) ?? null;
+		} else {
+			currentText += text;
+			segmentEndMs = (token.end_ms as number) ?? segmentEndMs;
+		}
+	}
+
+	// Flush last segment
+	if (currentSpeaker !== null && currentText.trim().length > 0) {
+		segments.push({
+			speaker: currentSpeaker,
+			text: currentText.trim(),
+			start_ms: segmentStartMs,
+			end_ms: segmentEndMs,
+		});
+	}
+
+	return segments;
+}
+
 export async function transcriptionHandler(
 	this: IExecuteFunctions,
 	operation: string,
@@ -283,11 +334,18 @@ export async function transcriptionHandler(
 					`/transcriptions/${transcriptionId}/transcript`,
 				);
 
-				// Build clean result: text at top level, tokens only if requested
+				// Build clean result: text at top level
 				transcriptionResult = {
 					...statusResponse,
 					text: transcriptResponse.text || '',
 				};
+
+				// Speaker diarization: group tokens by speaker into segments
+				const hasDiarization = additionalFields.enableSpeakerDiarization === true;
+				if (hasDiarization && transcriptResponse.tokens && transcriptionResult) {
+					transcriptionResult.speakers = buildSpeakerSegments(transcriptResponse.tokens as IDataObject[]);
+				}
+
 				if (includeTokens && transcriptResponse.tokens && transcriptionResult) {
 					transcriptionResult.tokens = transcriptResponse.tokens;
 				}
@@ -515,11 +573,18 @@ export async function transcriptionHandler(
 				// Get the actual transcript result
 				const transcriptResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}/transcript`);
 
-				// Build clean result: text at top level, tokens only if requested
+				// Build clean result: text at top level
 				transcriptionResult = {
 					...statusResponse,
 					text: transcriptResponse.text || '',
 				};
+
+				// Speaker diarization: group tokens by speaker into segments
+				const hasDiarization = additionalFields.enableSpeakerDiarization === true;
+				if (hasDiarization && transcriptResponse.tokens && transcriptionResult) {
+					transcriptionResult.speakers = buildSpeakerSegments(transcriptResponse.tokens as IDataObject[]);
+				}
+
 				break;
 			}
 
