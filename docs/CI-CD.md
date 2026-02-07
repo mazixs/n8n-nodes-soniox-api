@@ -1,276 +1,157 @@
 # CI/CD Pipeline Documentation
 
+**Updated:** 2026-02-07 (v0.7.0)
+
 ## Overview
 
-This project relies on GitHub Actions to automate the following processes:
-- Continuous Integration (linting + build verification)
-- Automatic publishing to npm
-- Release/version orchestration
+GitHub Actions automate:
+- **CI** — lint, build, audit across Node.js 18/20/22
+- **Release** — version bump, tag, GitHub Release (with CI gate)
+- **Publish** — dry-run → npm publish → verification
 
 ---
 
 ## Workflows
 
-### 1. `ci.yml` – Continuous Integration
+### 1. `ci.yml` — Continuous Integration
 
-**Triggers:**
-- Pushes to `main` or `develop`
-- Pull requests targeting these branches
+**Triggers:** push/PR to `main`/`develop`, reusable via `workflow_call`
 
-**Steps:**
-1. Check out the repository
-2. Install Node.js 22 (LTS)
-3. Install dependencies via `npm ci`
-4. Lint the source (`npm run lint`)
-5. Build the package (`npm run build`)
-6. Verify the `dist/` directory exists
-
-**Goal:** keep code quality high before merging
+**Key features:**
+- **Node.js matrix:** 18, 20, 22 (`fail-fast: false`)
+- **Concurrency:** `ci-${{ github.ref }}` — cancels duplicate runs
+- **Steps:** checkout → install → lint → build → verify dist → security audit → package size check
 
 ---
 
-### 2. `create-release.yml` – Release creation
+### 2. `create-release.yml` — Release Creation
 
-**Trigger:** Manual run (`workflow_dispatch`).
+**Trigger:** Manual `workflow_dispatch` with `version` + `prerelease` inputs.
 
-**Inputs:**
-- `version` – target version (e.g., `0.6.1`)
-- `prerelease` – boolean flag to mark the release as pre-release
+**Key features:**
+- **CI gate:** runs full CI pipeline before release (`needs: ci`)
+- **CHANGELOG validation:** blocks release if no `## [X.Y.Z]` entry exists
+- **Shell injection prevention:** all user inputs via `env:` vars, not inline `${{ }}`
+- **Concurrency:** `release` group (no cancel)
+- **Git author:** `github-actions[bot]`
+- **Idempotent commit:** skips if no changes to commit
 
-**Steps:**
-1. Validate version format (Semantic Versioning)
-2. Ensure the tag does not already exist
-3. Update `package.json` (and lockfile) with the new version
-4. Extract release notes from `CHANGELOG.md`
-5. Commit & push the version bump
-6. Create and push git tag `vX.Y.Z`
-7. Create the GitHub Release with extracted notes
+**Flow:**
+1. Run CI (matrix 18/20/22)
+2. Validate version format + tag uniqueness
+3. Verify CHANGELOG entry exists
+4. Update `package.json` version
+5. Extract release notes from CHANGELOG
+6. Commit + push + tag `vX.Y.Z`
+7. Create GitHub Release
 
-**Outputs:**
-- Git tag `vX.Y.Z`
-- GitHub Release populated with CHANGELOG text
-
-**Downstream:** creating a release automatically triggers `publish.yml`
-
----
-
-### 3. `publish.yml` – npm publishing
-
-**Triggers:**
-- GitHub Release of type `published`
-- Manual dispatch with `version` input
-
-**Steps:**
-1. Check out repository with full history
-2. Install Node.js 22 and configure npm registry auth
-3. Install dependencies (`npm ci`)
-4. Lint (`npm run lint`)
-5. Build (`npm run build`)
-6. Confirm `dist/` exists
-7. Align `package.json` version with the release tag or manual input
-8. Publish to npm via `npm publish --access public`
-9. Create a release branch `release/vX.Y.Z`
-
-**Requirements:**
-- GitHub secret `NPM_TOKEN`
-- Publish access to the npm package namespace
-
-**Result:**
-- Package available on [npmjs.com](https://www.npmjs.com/package/n8n-nodes-soniox-api)
-- Release branch `release/vX.Y.Z` pushed to the repo
+**Downstream:** GitHub Release triggers `publish.yml` automatically.
 
 ---
 
-## GitHub secrets
+### 3. `publish.yml` — npm Publishing
 
-### Required secrets
+**Triggers:** GitHub Release `published` or manual `workflow_dispatch`.
 
-| Secret | Purpose | Where to get it |
-|--------|---------|-----------------|
-| `NPM_TOKEN` | Auth token for `npm publish` | [npmjs.com → Settings → Access Tokens](https://www.npmjs.com/settings/~/tokens) |
-| `GITHUB_TOKEN` | Auto-injected by GitHub Actions | Provided per workflow |
+**Key features:**
+- **Unified version resolution:** single step handles both release tag and manual input
+- **Dry-run before publish:** catches issues before actual publish
+- **Post-publish verification:** checks npm registry after publish
+- **Concurrency:** `publish` group (no cancel)
+- **Permissions:** `contents: read` only (no write needed)
 
-### Configuring `NPM_TOKEN`
-
-1. Log into [npmjs.com](https://www.npmjs.com/)
-2. Navigate to **Account → Access Tokens → Generate New Token**
-3. Choose the **Automation** token type (intended for CI/CD)
-4. Copy the token (only shown once)
-5. Add it to GitHub: Settings → Secrets and variables → Actions → *New repository secret*
-   - Name: `NPM_TOKEN`
-   - Value: `<your_token>`
+**Flow:**
+1. Checkout → install → lint → build → verify dist
+2. Resolve target version (from tag or input)
+3. `npm publish --dry-run` (safety check)
+4. `npm publish --access public`
+5. Verify publication on npm registry
 
 ---
 
-## Release process
+## GitHub Secrets
 
-### Standard flow
+| Secret | Purpose | How to get |
+|--------|---------|------------|
+| `NPM_TOKEN` | npm publish auth | [npmjs.com → Access Tokens](https://www.npmjs.com/settings/~/tokens) (Automation type) |
+| `GITHUB_TOKEN` | Auto-injected | Provided by GitHub Actions |
+
+---
+
+## Release Process
 
 ```
-1. Develop in feature branches
-   └─> open PR into develop/main
-       └─> CI validates the code
-           └─> merge once checks pass
-
-2. Prepare for release
-   └─> update CHANGELOG.md
-       └─> run create-release.yml
-           └─> GitHub Release generated
-               └─> publish.yml runs automatically
-                   └─> package appears on npm
+feature branch → PR → CI validates → merge to main
+                                         ↓
+                              update CHANGELOG.md
+                              update package.json version
+                                         ↓
+                              run create-release.yml
+                              (CI gate → validate → tag → GitHub Release)
+                                         ↓
+                              publish.yml auto-triggers
+                              (dry-run → publish → verify)
+                                         ↓
+                              package live on npm ✅
 ```
 
 ### Semantic Versioning
 
-- **MAJOR** (`1.0.0`): breaking changes
-- **MINOR** (`0.6.0`): new backwards-compatible features
-- **PATCH** (`0.6.1`): bug fixes only
-
-**Examples:**
-- `0.6.0 → 0.6.1` (bug fix)
-- `0.6.0 → 0.7.0` (new functionality)
-- `0.6.0 → 1.0.0` (breaking change)
+| Bump | When | Example |
+|------|------|---------|
+| PATCH | Bug fixes only | `0.7.0 → 0.7.1` |
+| MINOR | New features (backward-compatible) | `0.7.0 → 0.8.0` |
+| MAJOR | Breaking changes | `0.7.0 → 1.0.0` |
 
 ---
 
-## Branch structure
+## Branch Structure
 
 ```
-main/
-  ├── develop (ongoing development)
-  ├── feature/* (new functionality)
-  ├── release/v* (auto-created during publish)
-  └── hotfix/* (urgent fixes)
+main          — stable production branch
+├── develop   — integration branch
+├── feature/* — new functionality
+└── hotfix/*  — urgent fixes
 ```
-
-**Strategy:**
-- `main` – stable production branch
-- `develop` – integration branch for work in progress
-- `release/vX.Y.Z` – created automatically per release
 
 ---
 
-## Local development
-
-### Pre-commit checklist
+## Local Development
 
 ```bash
-# Lint
-npm run lint
+# Pre-commit checklist
+npm run lint          # Check code style
+npm run lintfix       # Auto-fix lint issues
+npm run build         # TypeScript + icons
+npm audit             # Security check
+npm pack --dry-run    # Preview package contents
 
-# Autofix lint violations
-npm run lintfix
-
-# Build TypeScript + assets
-npm run build
-
-# Dry-run npm pack artifact
-npm pack --dry-run
-```
-
-### Replaying CI locally
-
-```bash
-# Install act (https://github.com/nektos/act)
-brew install act   # macOS
-sudo apt install act  # Linux
-
-# Run CI workflow locally
+# Replay CI locally (requires act: https://github.com/nektos/act)
 act -j lint-and-build
 ```
 
 ---
 
-## Monitoring & troubleshooting
+## Troubleshooting
 
-### Checking workflow status
+### `npm publish 403 Forbidden`
+- `NPM_TOKEN` expired → rotate in GitHub Secrets
+- Version already published → bump version
+- Check: `npm view n8n-nodes-soniox-api versions`
 
-1. **GitHub UI**
-   - Repository → Actions
-   - Select the workflow run
-   - Inspect step-by-step logs
+### Build failed in CI
+- Reproduce locally: `npm ci && npm run lint && npm run build`
+- Check Node.js version compatibility (18/20/22)
 
-2. **GitHub CLI**
-   ```bash
-   # List runs
-   gh run list
-
-   # Inspect logs
-   gh run view <run-id> --log
-   ```
-
-### Frequent issues
-
-**Issue:** `npm publish 403 Forbidden`
-
-**Causes:**
-- `NPM_TOKEN` expired or revoked
-- Account lacks publish rights to the package
-- Version already published
-
-**Fix:**
-```bash
-# Inspect published versions
-npm view n8n-nodes-soniox-api versions
-
-# Rotate your npm Automation token
-# Update NPM_TOKEN in GitHub secrets
-```
+### Release exists but package missing on npm
+1. Check `publish.yml` logs in Actions tab
+2. Manual publish: `git checkout vX.Y.Z && npm ci && npm run build && npm publish --access public`
 
 ---
 
-**Issue:** `Build failed` in CI
+## References
 
-**Causes:**
-- Lint failures
-- TypeScript compilation errors
-- Missing dependencies
-
-**Fix:**
-```bash
-# Reproduce locally
-npm ci
-npm run lint
-npm run build
-
-# Confirm repo state
-git status
-```
-
----
-
-**Issue:** Release exists but package is missing on npm
-
-**Causes:**
-- Failure inside `publish.yml`
-- `NPM_TOKEN` expired
-
-**Fix:**
-1. Inspect `publish.yml` logs
-2. Publish manually if needed:
-   ```bash
-   git checkout v0.6.1
-   npm ci
-   npm run build
-   npm publish --access public
-   ```
-
----
-
-## Best practices
-
-1. Update `CHANGELOG.md` before every release
-2. Test locally before pushing
-3. Use pre-releases for testing in production-like environments
-4. Respect Semantic Versioning rules
-5. Never skip CI checks
-6. Document breaking changes explicitly in the changelog
-
----
-
-## Ссылки
-
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [npm Publishing Documentation](https://docs.npmjs.com/cli/v9/commands/npm-publish)
+- [GitHub Actions](https://docs.github.com/en/actions)
+- [npm Publishing](https://docs.npmjs.com/cli/v10/commands/npm-publish)
 - [Semantic Versioning](https://semver.org/)
 - [Keep a Changelog](https://keepachangelog.com/)

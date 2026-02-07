@@ -102,17 +102,27 @@ export async function sonioxApiRequestAllItems(
 	endpoint: string,
 	body: IDataObject = {},
 	qs: IDataObject = {},
+	itemsKey?: string,
 ): Promise<any> {
 	const returnData: IDataObject[] = [];
 	let responseData;
 	qs.limit = API_LIMITS.PAGINATION_LIMIT;
-	qs.offset = 0;
+
+	// Determine the response key based on endpoint
+	const key = itemsKey || (endpoint.includes('/files') ? 'files' : endpoint.includes('/transcriptions') ? 'transcriptions' : 'items');
 
 	do {
 		responseData = await sonioxApiRequest.call(this, method, endpoint, body, qs);
-		returnData.push(...responseData.items);
-		qs.offset = (qs.offset as number) + qs.limit;
-	} while (responseData.items.length !== 0);
+		const items = responseData[key] || [];
+		returnData.push(...items);
+
+		// Soniox API uses cursor-based pagination
+		if (responseData.next_page_cursor) {
+			qs.cursor = responseData.next_page_cursor;
+		} else {
+			break;
+		}
+	} while (true);
 
 	return returnData;
 }

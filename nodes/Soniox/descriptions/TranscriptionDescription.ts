@@ -145,31 +145,122 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Language',
-				name: 'language',
+				displayName: 'Language Hints',
+				name: 'languageHints',
 				type: 'string',
 				default: '',
-				description: 'Language code (e.g., en, es, fr, ru)',
-				placeholder: 'en',
+				description: 'Comma-separated expected language codes in the audio (e.g., en,ru,es). If not specified, languages are auto-detected.',
+				placeholder: 'en,ru',
 			},
 			{
-				displayName: 'Context',
-				name: 'context',
+				displayName: 'Language Hints Strict',
+				name: 'languageHintsStrict',
+				type: 'boolean',
+				default: false,
+				description: 'Whether the model should rely more on language hints (restrict to specified languages)',
+			},
+			{
+				displayName: 'Context: General (JSON)',
+				name: 'contextGeneral',
 				type: 'string',
 				typeOptions: {
 					rows: 4,
 				},
 				default: '',
-				description: 'Additional context to improve transcription accuracy (e.g., domain-specific terms, names)',
-				placeholder: 'Technical terms: API, webhook, JSON',
+				description: 'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				placeholder: '[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
 			},
 			{
-				displayName: 'Translation Languages',
-				name: 'translationLanguages',
+				displayName: 'Context: Text',
+				name: 'contextText',
+				type: 'string',
+				typeOptions: {
+					rows: 4,
+				},
+				default: '',
+				description: 'Free-form background text to expand on general context (e.g., meeting notes, prior interactions, reference documents)',
+				placeholder: 'The customer contacted support to update their auto policy after purchasing a new vehicle.',
+			},
+			{
+				displayName: 'Context: Terms',
+				name: 'contextTerms',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated language codes for translation (e.g., ru,es,fr)',
-				placeholder: 'ru,es,fr',
+				description: 'Comma-separated domain-specific or uncommon words to improve transcription accuracy',
+				placeholder: 'Celebrex, Zyrtec, Amoxicillin',
+			},
+			{
+				displayName: 'Context: Translation Terms (JSON)',
+				name: 'contextTranslationTerms',
+				type: 'string',
+				typeOptions: {
+					rows: 3,
+				},
+				default: '',
+				description: 'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}]',
+				placeholder: '[{"source":"MRI","target":"RM"}]',
+			},
+			{
+				displayName: 'Translation Type',
+				name: 'translationType',
+				type: 'options',
+				options: [
+					{
+						name: 'None',
+						value: '',
+					},
+					{
+						name: 'One-Way',
+						value: 'one_way',
+						description: 'Translate transcript into a single target language',
+					},
+					{
+						name: 'Two-Way',
+						value: 'two_way',
+						description: 'Bilingual translation between two languages',
+					},
+				],
+				default: '',
+				description: 'Type of translation to apply to the transcription',
+			},
+			{
+				displayName: 'Target Language',
+				name: 'targetLanguage',
+				type: 'string',
+				default: '',
+				description: 'Language code to translate the transcript into (for one-way translation)',
+				placeholder: 'es',
+				displayOptions: {
+					show: {
+						translationType: ['one_way'],
+					},
+				},
+			},
+			{
+				displayName: 'Language A',
+				name: 'languageA',
+				type: 'string',
+				default: '',
+				description: 'First language for two-way translation',
+				placeholder: 'en',
+				displayOptions: {
+					show: {
+						translationType: ['two_way'],
+					},
+				},
+			},
+			{
+				displayName: 'Language B',
+				name: 'languageB',
+				type: 'string',
+				default: '',
+				description: 'Second language for two-way translation',
+				placeholder: 'ru',
+				displayOptions: {
+					show: {
+						translationType: ['two_way'],
+					},
+				},
 			},
 			{
 				displayName: 'Enable Speaker Diarization',
@@ -179,11 +270,43 @@ export const transcriptionFields: INodeProperties[] = [
 				description: 'Whether to enable speaker diarization (identify different speakers)',
 			},
 			{
-				displayName: 'Include Non-Final',
-				name: 'includeNonFinal',
+				displayName: 'Enable Language Identification',
+				name: 'enableLanguageIdentification',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to include non-final results',
+				description: 'Whether to detect language for each part of the transcription',
+			},
+			{
+				displayName: 'Webhook URL',
+				name: 'webhookUrl',
+				type: 'string',
+				default: '',
+				description: 'URL to receive webhook notification when transcription completes or fails',
+				placeholder: 'https://example.com/webhook',
+			},
+			{
+				displayName: 'Webhook Auth Header Name',
+				name: 'webhookAuthHeaderName',
+				type: 'string',
+				default: '',
+				description: 'Name of the authentication header for webhook requests',
+				placeholder: 'Authorization',
+			},
+			{
+				displayName: 'Webhook Auth Header Value',
+				name: 'webhookAuthHeaderValue',
+				type: 'string',
+				typeOptions: { password: true },
+				default: '',
+				description: 'Value of the authentication header for webhook requests',
+			},
+			{
+				displayName: 'Client Reference ID',
+				name: 'clientReferenceId',
+				type: 'string',
+				default: '',
+				description: 'Optional tracking identifier string (does not need to be unique)',
+				placeholder: 'my-job-123',
 			},
 		],
 	},
@@ -214,6 +337,13 @@ export const transcriptionFields: INodeProperties[] = [
 				type: 'boolean',
 				default: false,
 				description: 'Whether to delete the transcription from Soniox servers after retrieval. Useful for privacy and staying within API limits.',
+			},
+			{
+				displayName: 'Include Tokens',
+				name: 'includeTokens',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to include detailed token-level data (word timestamps, confidence, speaker, language) in the output. When disabled, only clean text is returned.',
 			},
 			{
 				displayName: 'Max Wait Time (seconds)',
@@ -254,7 +384,7 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		description: 'The ID of the transcription',
 	},
-	// List operation
+	// List operation (includes deprecated 'getAll' for backward compatibility)
 	{
 		displayName: 'Return All',
 		name: 'returnAll',
@@ -262,7 +392,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['list'],
+				operation: ['list', 'getAll'],
 			},
 		},
 		default: false,
@@ -275,7 +405,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['list'],
+				operation: ['list', 'getAll'],
 				returnAll: [false],
 			},
 		},
@@ -335,31 +465,122 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Language',
-				name: 'language',
+				displayName: 'Language Hints',
+				name: 'languageHints',
 				type: 'string',
 				default: '',
-				description: 'Language code (e.g., en, es, fr, ru)',
-				placeholder: 'en',
+				description: 'Comma-separated expected language codes in the audio (e.g., en,ru,es). If not specified, languages are auto-detected.',
+				placeholder: 'en,ru',
 			},
 			{
-				displayName: 'Context',
-				name: 'context',
+				displayName: 'Language Hints Strict',
+				name: 'languageHintsStrict',
+				type: 'boolean',
+				default: false,
+				description: 'Whether the model should rely more on language hints (restrict to specified languages)',
+			},
+			{
+				displayName: 'Context: General (JSON)',
+				name: 'contextGeneral',
 				type: 'string',
 				typeOptions: {
 					rows: 4,
 				},
 				default: '',
-				description: 'Additional context to improve transcription accuracy (e.g., domain-specific terms, names)',
-				placeholder: 'Technical terms: API, webhook, JSON',
+				description: 'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				placeholder: '[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
 			},
 			{
-				displayName: 'Translation Languages',
-				name: 'translationLanguages',
+				displayName: 'Context: Text',
+				name: 'contextText',
+				type: 'string',
+				typeOptions: {
+					rows: 4,
+				},
+				default: '',
+				description: 'Free-form background text to expand on general context (e.g., meeting notes, prior interactions, reference documents)',
+				placeholder: 'The customer contacted support to update their auto policy after purchasing a new vehicle.',
+			},
+			{
+				displayName: 'Context: Terms',
+				name: 'contextTerms',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated language codes for translation (e.g., ru,es,fr)',
-				placeholder: 'ru,es,fr',
+				description: 'Comma-separated domain-specific or uncommon words to improve transcription accuracy',
+				placeholder: 'Celebrex, Zyrtec, Amoxicillin',
+			},
+			{
+				displayName: 'Context: Translation Terms (JSON)',
+				name: 'contextTranslationTerms',
+				type: 'string',
+				typeOptions: {
+					rows: 3,
+				},
+				default: '',
+				description: 'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}]',
+				placeholder: '[{"source":"MRI","target":"RM"}]',
+			},
+			{
+				displayName: 'Translation Type',
+				name: 'translationType',
+				type: 'options',
+				options: [
+					{
+						name: 'None',
+						value: '',
+					},
+					{
+						name: 'One-Way',
+						value: 'one_way',
+						description: 'Translate transcript into a single target language',
+					},
+					{
+						name: 'Two-Way',
+						value: 'two_way',
+						description: 'Bilingual translation between two languages',
+					},
+				],
+				default: '',
+				description: 'Type of translation to apply to the transcription',
+			},
+			{
+				displayName: 'Target Language',
+				name: 'targetLanguage',
+				type: 'string',
+				default: '',
+				description: 'Language code to translate the transcript into (for one-way translation)',
+				placeholder: 'es',
+				displayOptions: {
+					show: {
+						translationType: ['one_way'],
+					},
+				},
+			},
+			{
+				displayName: 'Language A',
+				name: 'languageA',
+				type: 'string',
+				default: '',
+				description: 'First language for two-way translation',
+				placeholder: 'en',
+				displayOptions: {
+					show: {
+						translationType: ['two_way'],
+					},
+				},
+			},
+			{
+				displayName: 'Language B',
+				name: 'languageB',
+				type: 'string',
+				default: '',
+				description: 'Second language for two-way translation',
+				placeholder: 'ru',
+				displayOptions: {
+					show: {
+						translationType: ['two_way'],
+					},
+				},
 			},
 			{
 				displayName: 'Enable Speaker Diarization',
@@ -369,11 +590,11 @@ export const transcriptionFields: INodeProperties[] = [
 				description: 'Whether to enable speaker diarization (identify different speakers)',
 			},
 			{
-				displayName: 'Include Non-Final',
-				name: 'includeNonFinal',
+				displayName: 'Enable Language Identification',
+				name: 'enableLanguageIdentification',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to include non-final results',
+				description: 'Whether to detect language for each part of the transcription',
 			},
 		],
 	},
@@ -445,37 +666,5 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		description: 'The file ID to get transcription for',
 		placeholder: '{{$json.fileId}}',
-	},
-	// Get All operation
-	{
-		displayName: 'Return All',
-		name: 'returnAll',
-		type: 'boolean',
-		displayOptions: {
-			show: {
-				resource: ['transcription'],
-				operation: ['list'],
-			},
-		},
-		default: false,
-		description: 'Whether to return all results or only up to a given limit',
-	},
-	{
-		displayName: 'Limit',
-		name: 'limit',
-		type: 'number',
-		displayOptions: {
-			show: {
-				resource: ['transcription'],
-				operation: ['list'],
-				returnAll: [false],
-			},
-		},
-		typeOptions: {
-			minValue: 1,
-			maxValue: API_LIMITS.MAX_ITEMS_PER_REQUEST,
-		},
-		default: API_LIMITS.DEFAULT_LIMIT,
-		description: 'Max number of results to return',
 	},
 ];

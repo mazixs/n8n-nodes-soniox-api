@@ -1,12 +1,10 @@
-# Refactoring & Audit Results (v0.6.0)
-
-**Date:** 23 January 2026
-**Version:** 0.6.0
-**Status:** ✅ Deployed to production
+# Refactoring & Audit Results
 
 ---
 
-## 🏗 Architectural changes
+## v0.6.0 — Architecture Refactor (2026-01-23)
+
+**Status:** ✅ Production
 
 ### 1. Modularity (Separation of Concerns)
 The monolithic `execute` method in `Soniox.node.ts` was split into dedicated handlers:
@@ -63,9 +61,53 @@ New switches remove Soniox-side data automatically:
 
 ---
 
-## ✅ Verification status
-- **Build:** `npm run build` – ✅
-- **Lint:** `npm run lint` – ✅ (0 errors)
-- **Security:** `npm audit` – clean
+## v0.7.0 — API Audit & Latency Optimization (2026-02-07)
 
-The refactor enforces a “Zero Technical Debt” posture and readies the node for dependable production usage.
+**Status:** ✅ Production
+
+### Critical bug fixes
+
+| # | Bug | Root cause | Fix |
+|---|-----|-----------|-----|
+| 1 | Pagination returned incomplete results | `sonioxApiRequestAllItems` used offset-based pagination | Rewritten to cursor-based (`next_page_cursor`) |
+| 2 | File upload silently failed | API returns `id`, code expected `file_id` | `uploadResponse.id || uploadResponse.file_id` |
+| 3 | File list returned empty | `responseData.items` used | Changed to `responseData.files` |
+| 4 | Transcription list broken with `returnAll` | No `Array.isArray` check for flat vs object response | Added type guard |
+| 5 | Wrong API parameters sent | `language` (string), `translationLanguages` (string) | `language_hints[]`, `translation` object |
+| 6 | `includeNonFinal` sent to async API | WebSocket-only parameter | Removed from async operations |
+| 7 | `context` sent as string | API v4 requires JSON object | 4 structured UI fields → `buildContextObject()` |
+| 8 | `getByFile` response parsing | `response.items` | Changed to `response.transcriptions` |
+
+### Latency optimizations
+
+- **Immediate first poll:** removed initial `sleep(5000)` before first status check. Saves ~5s on short audio.
+- **Fire-and-forget cleanup:** `DELETE` requests for files/transcriptions no longer block result delivery. Result is returned first, cleanup runs in background.
+
+### New features
+
+- **Structured context (JSON):** 4 fields (general, text, terms, translation_terms) matching Soniox API v4.
+- **Include Tokens option:** token-level data is opt-in (default: clean text only).
+- **Language Hints Strict, Language Identification, Webhook support, Client Reference ID.**
+- **Real-time model filtering:** `stt-rt-*` models excluded from dropdown (WebSocket not supported in n8n).
+
+### Dependencies
+
+- `n8n-core`: 2.4.3 → 2.7.0
+- `n8n-workflow`: 2.4.3 → 2.7.0
+- `fast-xml-parser` override: `^5.3.4` (fixed 19 high severity vulnerabilities → 0)
+
+### CI/CD improvements
+
+- Node.js matrix: 18, 20, 22
+- CI gate before release
+- CHANGELOG validation
+- Shell injection prevention (env vars)
+- Dry-run + verification for npm publish
+- Concurrency control on all workflows
+
+---
+
+## Verification (both versions)
+- **Build:** `npm run build` — ✅
+- **Lint:** `npm run lint` — ✅ (0 errors)
+- **Security:** `npm audit` — 0 vulnerabilities

@@ -1,7 +1,7 @@
 # Soniox API Official Documentation
 
-**Sources:** https://soniox.com/docs/stt/ , https://soniox.com/blog/2025-10-21-soniox-v3/  
-**Retrieved:** 2026-01-23 via MCP Context7 & Exa
+**Sources:** https://soniox.com/docs/stt/ , https://soniox.com/docs/stt/models  
+**Retrieved:** 2026-02-07 via MCP Tavily & Exa
 
 ---
 
@@ -13,15 +13,15 @@ Soniox Speech-to-Text API delivers highly accurate, scalable audio transcription
 
 ---
 
-## CI/CD Workflow Readiness Snapshot (2026-01-23)
+## CI/CD Workflow Status (2026-02-07)
 
-| Workflow | Trigger | Coverage Highlights | Gaps / Actions |
-|----------|---------|---------------------|----------------|
-| `.github/workflows/ci.yml` | `push`, `pull_request` on `main` & `develop` | Node.js 22 matrix, caches npm, runs `npm ci`, `npm run lint`, `npm run build`, asserts `dist` presence | No automated tests; uses `actions/checkout@v6` / `setup-node@v6` (verify availability or pin to stable major); consider artifact upload for built dist |
-| `.github/workflows/create-release.yml` | manual `workflow_dispatch` | Validates version format, ensures tag uniqueness, bumps package version, extracts changelog, pushes tag + GitHub release | `awk` changelog extraction fails if release at EOF with no next header; force pushes can race with manual releases; does not regenerate dist before tagging |
-| `.github/workflows/publish.yml` | GitHub Release `published` or manual `workflow_dispatch` | Rebuilds package, syncs version from tag/input, runs lint/build before `npm publish`, supports manual publish for hotfix | Lacks provenance/signature, does not run tests, release branch creation duplicates if rerun; ensure `NODE_AUTH_TOKEN` scoped to publish only |
+| Workflow | Trigger | Key Features |
+|----------|---------|-------------|
+| `ci.yml` | push/PR + `workflow_call` | Node.js matrix (18/20/22), concurrency control, security audit, package size check |
+| `create-release.yml` | manual `workflow_dispatch` | CI gate (`needs: ci`), CHANGELOG validation, shell injection prevention, idempotent commits |
+| `publish.yml` | Release `published` / manual | Unified version resolution, dry-run before publish, post-publish verification, `contents: read` only |
 
-> Outcome: workflows are structurally ready but require (1) confirmation of action versions, (2) automated tests/artifact handling, (3) hardened changelog + publish safeguards before GA.
+> All workflows hardened in v0.7.0: concurrency groups, env-var injection, CI gate before release.
 
 ---
 
@@ -39,15 +39,17 @@ Authorization: Bearer <API_KEY>
 file: <binary_data>
 ```
 
-**Response:**
+**Response (201 Created):**
 ```json
 {
-  "file_id": "123e4567-e89b-12d3-a456-426614174000",
+  "id": "123e4567-e89b-12d3-a456-426614174000",
   "filename": "audio.mp3",
   "size": 1024000,
   "created_at": "2024-11-26T00:00:00Z"
 }
 ```
+
+> **Note:** The API returns `id`, not `file_id`. Use this value as `file_id` when creating transcriptions.
 
 ### Step 2: Create Transcription
 
@@ -60,7 +62,7 @@ file: <binary_data>
 **Request Body (key fields):**
 ```json
 {
-  "model": "stt-async-v3",                // Required (32-char max)
+  "model": "stt-async-v4",                // Required (32-char max)
   "file_id": "uuid-from-upload",          // Option 1: Uploaded file (mutually exclusive with audio_url)
   "audio_url": "https://example.com/audio.mp3",  // Option 2: Public URL (https only)
 
@@ -69,7 +71,12 @@ file: <binary_data>
     "type": "one_way",
     "target_language": "es"
   },
-  "context": "Medical terminology...",    // Nested object accepted; 10k chars soft cap
+  "context": {                              // Structured JSON object (API v4)
+    "general": [{"key": "domain", "value": "Healthcare"}],
+    "text": "Background context text...",
+    "terms": ["Celebrex", "Zyrtec"],
+    "translation_terms": [{"source": "MRI", "target": "RM"}]
+  },
   "enable_speaker_diarization": true,
   "enable_language_identification": true,
   "webhook_url": "https://...",
@@ -188,7 +195,7 @@ file: <binary_data>
 **From:** https://soniox.com/docs/stt/async/error-handling
 
 ### File Upload
-- **Max duration:** 300 minutes (fixed)
+- **Max duration:** 5 hours / 300 minutes (fixed)
 - **Storage quota:** Account-specific
 - **File count quota:** Account-specific
 
@@ -216,6 +223,22 @@ file: <binary_data>
 
 ## Available Models
 
+### Current Models (February 2026)
+
+| Model | Type | Status |
+|-------|------|--------|
+| `stt-rt-v4` | Real-time | Active — **not available in n8n node** (WebSocket required) |
+| `stt-async-v4` | Async | **Active (recommended for n8n)** |
+| `stt-rt-v3` | Real-time | Active — **not available in n8n node** (routes to v4 after 2026-02-28) |
+| `stt-async-v3` | Async | Active (routes to `stt-async-v4` after 2026-02-28) |
+
+### Aliases
+
+| Alias | Points To |
+|-------|----------|
+| `stt-rt-preview` | `stt-rt-v4` |
+| `stt-async-preview` | `stt-async-v4` |
+
 Get list of models:
 
 ```http
@@ -228,14 +251,23 @@ Authorization: Bearer <API_KEY>
 {
   "models": [
     {
-      "id": "stt-async-preview",
-      "name": "Async Preview Model",
-      "languages": ["en", "ru", "es", ...]
+      "id": "stt-rt-v4",
+      "aliased_model_id": null,
+      "name": "Speech-to-Text Real-time v4",
+      "context_version": 2,
+      "transcription_mode": "real_time",
+      "languages": [{"code": "en", "name": "English"}, ...],
+      "one_way_translation": "all_languages",
+      "two_way_translation": "all_languages",
+      "supports_language_hints_strict": true,
+      "supports_max_endpoint_delay": true
     },
     ...
   ]
 }
 ```
+
+> **Note:** Each model object contains `id` (not `model_id`), `name`, `languages[]` (array of `{code, name}` objects), `transcription_mode` (`"real_time"` or `"async"`), and translation capabilities.
 
 ----
 
@@ -245,7 +277,7 @@ Authorization: Bearer <API_KEY>
 |------|---------------|-------|
 | Uploaded files | 1,000 | Includes all non-deleted uploads |
 | File storage | 10 GB total | Delete files after transcription; Soniox never auto-purges |
-| Audio duration (async + RT) | 300 minutes | Hard ceiling per file/stream |
+| Audio duration (async + RT) | **5 hours (300 minutes)** | Per file/stream; extended from 60 min in v3 |
 | Pending async jobs | 100 | Additional requests fail with `429` |
 | Total async jobs | 2,000 (pending + completed + failed) | Clean up old jobs via `DELETE /v1/transcriptions/{id}` |
 | Real-time requests per minute | 100 | Across WebSocket start requests |
@@ -279,7 +311,7 @@ Limit increases (except duration) require Soniox Console tickets.
 ## Real-time (WebSocket) Cheat Sheet
 
 - **Endpoint:** `wss://stt-rt.soniox.com/transcribe-websocket`
-- **Handshake payload:** `{ "api_key": "...", "model": "stt-rt-v3", "audio_format": "auto", "language_hints": ["en"], ... }`
+- **Handshake payload:** `{ "api_key": "...", "model": "stt-rt-v4", "audio_format": "auto", "language_hints": ["en"], ... }`
 - Streams send binary audio frames; send empty frame to finalize. Server replies with incremental tokens containing `text`, `start_ms`, `end_ms`, `speaker`, `language`, `translation_status`.
 - Error codes mirror HTTP (400 bad config, 401 auth, 402 billing, 408 timeout, 429 limits, 503 restart required). Close + reopen when receiving `finished: true` or unrecoverable errors.
 
@@ -291,7 +323,7 @@ Limit increases (except duration) require Soniox Console tickets.
 2. **Timeout heuristic:** `job_timeout = max(5 min, audio_duration_ms * 3)` to absorb queueing.
 3. **Webhooks first:** Use webhooks for anything longer than 2 minutes. Keep webhook handlers idempotent.
 4. **Storage hygiene:** Immediately `DELETE /v1/files/{file_id}` and `/v1/transcriptions/{id}` after archiving output to stay under 10 GB / 1,000 file cap.
-5. **Version pinning:** Default to `stt-async-v3` and `stt-rt-v3` for parity between async and streaming results; fall back to preview models only for experimentation.
+5. **Version pinning:** Default to `stt-async-v4` and `stt-rt-v4` for parity between async and streaming results; v3 models will auto-route to v4 after 2026-02-28.
 6. **Rate-limit safety:** Implement 100 RPM cap client-side; queue or jitter requests to avoid 429 bursts.
 
 ---
@@ -305,7 +337,7 @@ const uploadResponse = await fetch('https://api.soniox.com/v1/files', {
   headers: { 'Authorization': `Bearer ${API_KEY}` },
   body: formData
 });
-const { file_id } = await uploadResponse.json();
+const { id: file_id } = await uploadResponse.json();
 
 // 2. Create transcription
 const createResponse = await fetch('https://api.soniox.com/v1/transcriptions', {
@@ -315,7 +347,7 @@ const createResponse = await fetch('https://api.soniox.com/v1/transcriptions', {
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    model: 'stt-async-preview',
+    model: 'stt-async-v4',
     file_id: file_id,
     enable_speaker_diarization: true
   })
@@ -356,6 +388,6 @@ if (status === 'completed') {
 
 ---
 
-**Document Version:** 1.1  
-**Last Updated:** 2026-01-23  
-**Source:** Official Soniox Documentation via Context7 MCP & Exa
+**Document Version:** 2.0  
+**Last Updated:** 2026-02-07  
+**Source:** Official Soniox Documentation via Tavily MCP & Exa

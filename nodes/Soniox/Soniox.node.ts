@@ -102,7 +102,13 @@ export class Soniox implements INodeType {
 							value: modelId,
 							description: modelDescription || modelName,
 						};
-					}).filter((option: INodePropertyOptions) => option.value); // Remove invalid entries
+					}).filter((option: INodePropertyOptions) => {
+						if (!option.value) return false;
+						// Exclude real-time models — WebSocket not supported in n8n nodes
+						const id = String(option.value);
+						if (id.includes('stt-rt') || id.includes('realtime') || id.includes('real-time')) return false;
+						return true;
+					});
 
 					if (options.length === 0) {
 						throw new Error('No models returned from API');
@@ -110,10 +116,10 @@ export class Soniox implements INodeType {
 
 					return options;
 				} catch {
-					// Fallback if API fails
+					// Fallback: only async models (real-time requires WebSocket, not supported in n8n)
 					return [
-						{ name: 'English v2 Low Latency', value: 'en_v2_lowlatency', description: 'English v2 Low Latency model' },
-						{ name: 'English v2', value: 'en_v2', description: 'English v2 model' },
+						{ name: 'Speech-to-Text Async v4', value: 'stt-async-v4', description: 'Async transcription model (recommended)' },
+						{ name: 'Speech-to-Text Async v3', value: 'stt-async-v3', description: 'Async transcription model (legacy, auto-routes to v4 after 2026-02-28)' },
 					];
 				}
 			},

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., 0.1.1)'
+        description: 'Release version (e.g., 0.7.0)'
         required: true
         type: string
       prerelease:
@@ -13,74 +13,105 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  # Run CI checks before creating release
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   create-release:
+    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          
+
       - name: Validate version format
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
-          if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
-            echo "Error: Invalid version format. Expected: X.Y.Z or X.Y.Z-suffix"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format '$VERSION'. Expected: X.Y.Z or X.Y.Z-suffix"
             exit 1
           fi
-          echo "Version format is valid: $VERSION"
-          
-      - name: Check if tag exists
+          echo "✅ Version format valid: $VERSION"
+
+      - name: Check if tag already exists
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Error: Tag v$VERSION already exists"
+            echo "::error::Tag v$VERSION already exists"
             exit 1
           fi
-          
+
+      - name: Verify CHANGELOG entry exists
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "::error::No CHANGELOG.md entry found for version $VERSION. Add a changelog entry before releasing."
+            exit 1
+          fi
+          echo "✅ CHANGELOG entry found for $VERSION"
+
+      - name: Verify package.json version matches
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "::warning::package.json version ($PKG_VERSION) differs from release version ($VERSION). Will update."
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          
+
       - name: Update package.json version
-        run: |
-          VERSION=${{ github.event.inputs.version }}
-          npm version $VERSION --no-git-tag-version
-          
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Extract changelog for version
         id: changelog
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
-          # Извлекаем секцию changelog для этой версии
           CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '1d;$d' | sed '/^$/d' || echo "Release version $VERSION")
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="Release version $VERSION"
           fi
-          # Сохраняем в output (экранируем для GitHub Actions)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          
+
       - name: Commit version update
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "chore: bump version to $VERSION"
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "chore: release v$VERSION"
           git push
-          
+
       - name: Create and push tag
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION=${{ github.event.inputs.version }}
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin "v$VERSION"
-          
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

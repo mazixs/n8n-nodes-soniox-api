@@ -7,6 +7,60 @@ import {
 import { Readable } from 'stream';
 import { sonioxApiRequest, sonioxApiRequestAllItems } from '../GenericFunctions';
 
+/**
+ * Builds the Soniox context object from individual UI fields.
+ * API expects: { general: [{key,value}], text: string, terms: string[], translation_terms: [{source,target}] }
+ */
+function buildContextObject(additionalFields: IDataObject): IDataObject | undefined {
+	const context: IDataObject = {};
+	let hasContext = false;
+
+	if (additionalFields.contextGeneral) {
+		try {
+			const general = JSON.parse(additionalFields.contextGeneral as string);
+			if (Array.isArray(general) && general.length > 0) {
+				context.general = general;
+				hasContext = true;
+			}
+		} catch {
+			// Invalid JSON — skip silently, user will see no effect
+		}
+	}
+
+	if (additionalFields.contextText) {
+		const text = (additionalFields.contextText as string).trim();
+		if (text.length > 0) {
+			context.text = text;
+			hasContext = true;
+		}
+	}
+
+	if (additionalFields.contextTerms) {
+		const terms = (additionalFields.contextTerms as string)
+			.split(',')
+			.map(t => t.trim())
+			.filter(t => t.length > 0);
+		if (terms.length > 0) {
+			context.terms = terms;
+			hasContext = true;
+		}
+	}
+
+	if (additionalFields.contextTranslationTerms) {
+		try {
+			const translationTerms = JSON.parse(additionalFields.contextTranslationTerms as string);
+			if (Array.isArray(translationTerms) && translationTerms.length > 0) {
+				context.translation_terms = translationTerms;
+				hasContext = true;
+			}
+		} catch {
+			// Invalid JSON — skip silently
+		}
+	}
+
+	return hasContext ? context : undefined;
+}
+
 export async function transcriptionHandler(
 	this: IExecuteFunctions,
 	operation: string,
@@ -23,6 +77,7 @@ export async function transcriptionHandler(
 		const options = this.getNodeParameter('options', i, {}) as IDataObject;
 		const deleteAudioFile = options.deleteAudioFile !== false; // Default to true
 		const deleteTranscription = options.deleteTranscription === true; // Default to false
+		const includeTokens = options.includeTokens === true; // Default to false
 
 		// CRITICAL: Remove audio_url from additionalFields if somehow present
 		delete additionalFields.audio_url;
@@ -125,23 +180,57 @@ export async function transcriptionHandler(
 		}
 
 		// Add only specific fields from additionalFields (avoid sending audio_url accidentally)
-		if (additionalFields.language) requestBody.language = additionalFields.language;
-		if (additionalFields.context) requestBody.context = additionalFields.context;
-
-		if (additionalFields.translationLanguages) {
-			const languages = (additionalFields.translationLanguages as string)
+		if (additionalFields.languageHints) {
+			const hints = (additionalFields.languageHints as string)
 				.split(',')
 				.map(l => l.trim())
 				.filter(l => l.length > 0);
-			if (languages.length > 0) requestBody.translation_languages = languages;
+			if (hints.length > 0) requestBody.language_hints = hints;
+		}
+
+		if (additionalFields.languageHintsStrict) {
+			requestBody.language_hints_strict = additionalFields.languageHintsStrict;
+		}
+
+		const contextObj = buildContextObject(additionalFields);
+		if (contextObj) requestBody.context = contextObj;
+
+		if (additionalFields.translationType) {
+			const translationType = additionalFields.translationType as string;
+			if (translationType === 'one_way' && additionalFields.targetLanguage) {
+				requestBody.translation = {
+					type: 'one_way',
+					target_language: additionalFields.targetLanguage,
+				};
+			} else if (translationType === 'two_way' && additionalFields.languageA && additionalFields.languageB) {
+				requestBody.translation = {
+					type: 'two_way',
+					language_a: additionalFields.languageA,
+					language_b: additionalFields.languageB,
+				};
+			}
 		}
 
 		if (additionalFields.enableSpeakerDiarization) {
 			requestBody.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
 		}
 
-		if (additionalFields.includeNonFinal) {
-			requestBody.include_nonfinal = additionalFields.includeNonFinal;
+		if (additionalFields.enableLanguageIdentification) {
+			requestBody.enable_language_identification = additionalFields.enableLanguageIdentification;
+		}
+
+		if (additionalFields.webhookUrl) {
+			requestBody.webhook_url = additionalFields.webhookUrl;
+			if (additionalFields.webhookAuthHeaderName) {
+				requestBody.webhook_auth_header_name = additionalFields.webhookAuthHeaderName;
+			}
+			if (additionalFields.webhookAuthHeaderValue) {
+				requestBody.webhook_auth_header_value = additionalFields.webhookAuthHeaderValue;
+			}
+		}
+
+		if (additionalFields.clientReferenceId) {
+			requestBody.client_reference_id = additionalFields.clientReferenceId;
 		}
 
 		// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
@@ -174,8 +263,14 @@ export async function transcriptionHandler(
 		let transcriptionResult: IDataObject | null = null;
 		let lastStatus = '';
 
+		let isFirstPoll = true;
 		while (Date.now() - startTime < maxWaitMs) {
-			await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+			// First poll immediately (short audio may already be done), then with interval
+			if (!isFirstPoll) {
+				await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+			}
+			isFirstPoll = false;
+
 			const statusResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}`);
 			lastStatus = (statusResponse.status as string) || '';
 
@@ -188,10 +283,14 @@ export async function transcriptionHandler(
 					`/transcriptions/${transcriptionId}/transcript`,
 				);
 
+				// Build clean result: text at top level, tokens only if requested
 				transcriptionResult = {
 					...statusResponse,
-					transcript: transcriptResponse,
+					text: transcriptResponse.text || '',
 				};
+				if (includeTokens && transcriptResponse.tokens && transcriptionResult) {
+					transcriptionResult.tokens = transcriptResponse.tokens;
+				}
 				break;
 			}
 
@@ -217,25 +316,16 @@ export async function transcriptionHandler(
 			);
 		}
 
-		// Clean up file if requested
-		if (deleteAudioFile && fileId) {
-			try {
-				await sonioxApiRequest.call(this, 'DELETE', `/files/${fileId}`);
-			} catch {
-				// Ignore cleanup errors to ensure transcription result is returned
-			}
-		}
-
-		// Clean up transcription if requested
-		if (deleteTranscription && transcriptionId) {
-			try {
-				await sonioxApiRequest.call(this, 'DELETE', `/transcriptions/${transcriptionId}`);
-			} catch {
-				// Ignore cleanup errors
-			}
-		}
-
+		// Return result immediately, then fire-and-forget cleanup (no latency added)
 		returnData.push({ json: transcriptionResult });
+
+		// Fire-and-forget cleanup — don't block result delivery
+		if (deleteAudioFile && fileId) {
+			sonioxApiRequest.call(this, 'DELETE', `/files/${fileId}`).catch(() => {});
+		}
+		if (deleteTranscription && transcriptionId) {
+			sonioxApiRequest.call(this, 'DELETE', `/transcriptions/${transcriptionId}`).catch(() => {});
+		}
 	}
 
 	else if (operation === 'create') {
@@ -280,23 +370,34 @@ export async function transcriptionHandler(
 			model: model.trim(),
 		};
 
-		if (additionalFields.language) {
-			requestBody.language = additionalFields.language;
-		}
-
-		if (additionalFields.context) {
-			requestBody.context = additionalFields.context;
-		}
-
-		if (additionalFields.translationLanguages) {
-			// Parse comma-separated languages
-			const languages = (additionalFields.translationLanguages as string)
+		if (additionalFields.languageHints) {
+			const hints = (additionalFields.languageHints as string)
 				.split(',')
-				.map(lang => lang.trim())
-				.filter(lang => lang.length > 0);
-			
-			if (languages.length > 0) {
-				requestBody.translation_languages = languages;
+				.map(l => l.trim())
+				.filter(l => l.length > 0);
+			if (hints.length > 0) requestBody.language_hints = hints;
+		}
+
+		if (additionalFields.languageHintsStrict) {
+			requestBody.language_hints_strict = additionalFields.languageHintsStrict;
+		}
+
+		const contextObj = buildContextObject(additionalFields);
+		if (contextObj) requestBody.context = contextObj;
+
+		if (additionalFields.translationType) {
+			const translationType = additionalFields.translationType as string;
+			if (translationType === 'one_way' && additionalFields.targetLanguage) {
+				requestBody.translation = {
+					type: 'one_way',
+					target_language: additionalFields.targetLanguage,
+				};
+			} else if (translationType === 'two_way' && additionalFields.languageA && additionalFields.languageB) {
+				requestBody.translation = {
+					type: 'two_way',
+					language_a: additionalFields.languageA,
+					language_b: additionalFields.languageB,
+				};
 			}
 		}
 
@@ -304,14 +405,9 @@ export async function transcriptionHandler(
 			requestBody.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
 		}
 
-		if (additionalFields.includeNonFinal) {
-			requestBody.include_nonfinal = additionalFields.includeNonFinal;
+		if (additionalFields.enableLanguageIdentification) {
+			requestBody.enable_language_identification = additionalFields.enableLanguageIdentification;
 		}
-
-		// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
-		delete requestBody.audio_url;
-		delete (requestBody as any).audioUrl;
-		delete (requestBody as any)[' audio_url'];
 
 		const response = await sonioxApiRequest.call(
 			this,
@@ -352,29 +448,38 @@ export async function transcriptionHandler(
 
 		const body: IDataObject = { file_id: fileId.trim(), model: model.trim() };
 
-		if (additionalFields.language) body.language = additionalFields.language;
-		if (additionalFields.context) body.context = additionalFields.context;
+		if (additionalFields.languageHints) {
+			const hints = (additionalFields.languageHints as string).split(',').map(l => l.trim()).filter(l => l.length > 0);
+			if (hints.length > 0) body.language_hints = hints;
+		}
 
-		if (additionalFields.translationLanguages) {
-			const languages = (additionalFields.translationLanguages as string).split(',').map(l => l.trim()).filter(l => l.length > 0);
-			if (languages.length > 0) body.translation_languages = languages;
+		if (additionalFields.languageHintsStrict) {
+			body.language_hints_strict = additionalFields.languageHintsStrict;
+		}
+
+		const contextObj = buildContextObject(additionalFields);
+		if (contextObj) body.context = contextObj;
+
+		if (additionalFields.translationType) {
+			const translationType = additionalFields.translationType as string;
+			if (translationType === 'one_way' && additionalFields.targetLanguage) {
+				body.translation = {
+					type: 'one_way',
+					target_language: additionalFields.targetLanguage,
+				};
+			} else if (translationType === 'two_way' && additionalFields.languageA && additionalFields.languageB) {
+				body.translation = {
+					type: 'two_way',
+					language_a: additionalFields.languageA,
+					language_b: additionalFields.languageB,
+				};
+			}
 		}
 
 		if (additionalFields.enableSpeakerDiarization) body.enable_speaker_diarization = additionalFields.enableSpeakerDiarization;
-		if (additionalFields.includeNonFinal) body.include_nonfinal = additionalFields.includeNonFinal;
 
-		// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
-		// Delete from body in all possible forms
-		delete body.audio_url;
-		delete (body as any).audioUrl;
-		delete (body as any)[' audio_url'];
-		// Also ensure file_id is present and valid
-		if (!body.file_id) {
-			throw new NodeOperationError(
-				this.getNode(),
-				`file_id is missing from request body. Upload may have failed.`,
-				{ itemIndex: i },
-			);
+		if (additionalFields.enableLanguageIdentification) {
+			body.enable_language_identification = additionalFields.enableLanguageIdentification;
 		}
 
 		const createResponse = await sonioxApiRequest.call(this, 'POST', '/transcriptions', body);
@@ -394,8 +499,14 @@ export async function transcriptionHandler(
 		let transcriptionResult: IDataObject | null = null;
 		let lastStatus = '';
 
+		let isFirstPoll = true;
 		while (Date.now() - startTime < maxWaitMs) {
-			await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+			// First poll immediately, then with interval
+			if (!isFirstPoll) {
+				await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+			}
+			isFirstPoll = false;
+
 			const statusResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}`);
 			lastStatus = (statusResponse.status as string) || '';
 
@@ -403,9 +514,11 @@ export async function transcriptionHandler(
 			if (lastStatus === 'completed') {
 				// Get the actual transcript result
 				const transcriptResponse = await sonioxApiRequest.call(this, 'GET', `/transcriptions/${transcriptionId}/transcript`);
+
+				// Build clean result: text at top level, tokens only if requested
 				transcriptionResult = {
 					...statusResponse,
-					transcript: transcriptResponse,
+					text: transcriptResponse.text || '',
 				};
 				break;
 			}
@@ -428,16 +541,12 @@ export async function transcriptionHandler(
 			throw new NodeOperationError(this.getNode(), `Timeout after ${maxWaitTime}s. Status: ${lastStatus}. ID: ${transcriptionId}`, { itemIndex: i });
 		}
 
-		// Clean up transcription if requested
-		if (deleteTranscription && transcriptionId) {
-			try {
-				await sonioxApiRequest.call(this, 'DELETE', `/transcriptions/${transcriptionId}`);
-			} catch {
-				// Ignore cleanup errors
-			}
-		}
-
+		// Return result immediately, fire-and-forget cleanup
 		returnData.push({ json: transcriptionResult });
+
+		if (deleteTranscription && transcriptionId) {
+			sonioxApiRequest.call(this, 'DELETE', `/transcriptions/${transcriptionId}`).catch(() => {});
+		}
 	}
 
 	else if (operation === 'get') {
@@ -513,7 +622,7 @@ export async function transcriptionHandler(
 			);
 		}
 
-		const transcriptions = responseData.transcriptions || [];
+		const transcriptions = Array.isArray(responseData) ? responseData : responseData.transcriptions || [];
 		transcriptions.forEach((transcription: IDataObject) => {
 			returnData.push({ json: transcription });
 		});

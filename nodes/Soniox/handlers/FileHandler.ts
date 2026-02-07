@@ -86,11 +86,13 @@ export async function fileHandler(
 		);
 
 		// 7. Вернуть результат (с полным ответом API + удобные поля)
+		// API returns 'id' (not 'file_id')
+		const fileId = response.id || response.file_id;
 		returnData.push({
 			json: {
 				// Convenient fields for easy access
-				fileId: response.file_id,
-				file_id: response.file_id, // Alternative name for compatibility
+				fileId,
+				file_id: fileId, // Alternative name for compatibility
 				fileName: uploadFileName,
 				mimeType: binaryData.mimeType,
 				fileSize: binaryData.fileSize,
@@ -135,7 +137,7 @@ export async function fileHandler(
 			);
 		}
 
-		const fileItems = Array.isArray(responseData) ? responseData : responseData.items || [];
+		const fileItems = Array.isArray(responseData) ? responseData : responseData.files || [];
 		fileItems.forEach((item: IDataObject) => {
 			returnData.push({ json: item });
 		});

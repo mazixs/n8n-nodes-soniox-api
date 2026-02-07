@@ -12,8 +12,9 @@ This is an n8n community node that integrates [Soniox Speech-to-Text API](https:
 - 🧹 **Auto-Cleanup** — Options to automatically delete files and transcriptions from Soniox servers
 - 🌍 **60+ languages supported**
 - 🎭 **Speaker diarization**
-- 🔄 **Real-time translations**
+- 🔄 **Translation** — One-way and two-way translation support
 - ⚡ **Async processing with auto-polling**
+- 🧠 **Structured context** — Domain, terms, background text for better accuracy
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -115,29 +116,29 @@ The simplest way to transcribe audio - just **one node**:
 - Resource: `Transcription`
 - Operation: `Transcribe`
 - Binary Property: `data`
-- Model: `Realtime or Async` (or any model from dropdown)
+- Model: `stt-async-v4` (or any model from dropdown)
 - Additional Fields:
-  - Language: `en` (optional, auto-detected if not specified)
-  - Context: Domain-specific terms (optional)
-  - Translation Languages: `ru,es,fr` (optional)
+  - Language Hints: `en,ru` (optional, auto-detected if not specified)
+  - Context: General (JSON), Text, Terms, Translation Terms (optional)
+  - Translation Type: `one_way` or `two_way` (optional)
   - Enable Speaker Diarization: `true` (optional)
-  - Delete Audio File: `true` (default: true) - Clean up file after transcription
-  - Delete Transcription: `true` (default: false) - Delete transcription from server after retrieval
+  - Enable Language Identification: `true` (optional)
+- Options:
+  - Delete Audio File: `true` (default) — Clean up file after transcription
+  - Delete Transcription: `false` (default) — Delete transcription from server after retrieval
+  - Include Tokens: `false` (default) — Include word-level timestamps and confidence
 
 **Output:**
 ```json
 {
-  "transcript": {
-    "text": "Full transcribed text here",
-    "tokens": [
-      {"text": "Hello", "start_ms": 10, "confidence": 0.95}
-    ]
-  },
+  "text": "Full transcribed text here",
   "status": "completed",
-  "model": "stt-async-v3",
+  "model": "stt-async-v4",
   "audio_duration_ms": 16079
 }
 ```
+
+> **Note:** Token-level data (word timestamps, confidence, speaker) is available via the **Include Tokens** option.
 
 ### Advanced Workflow (Multiple Nodes)
 
@@ -162,6 +163,20 @@ For more control, use separate nodes:
 - ✅ **Timeout Control** — Configurable timeouts for API and file upload operations
 - ✅ **Type Safety** — Full TypeScript implementation with n8n-workflow types
 - ✅ **Error Handling** — Comprehensive error messages for debugging
+- ✅ **Zero Added Latency** — Immediate first poll, fire-and-forget cleanup
+
+## Real-time (WebSocket) Limitations
+
+This node uses the **Soniox Async REST API** exclusively. Real-time transcription via WebSocket (`wss://stt-rt.soniox.com/transcribe-websocket`) is **not supported**.
+
+**Why:**
+- n8n nodes execute via a synchronous `execute()` method that processes input items and returns output items. This request–response model is incompatible with persistent WebSocket connections that stream audio chunks and receive incremental results.
+- n8n has no built-in mechanism for maintaining long-lived WebSocket sessions across workflow executions.
+- The Soniox real-time API requires continuous binary audio streaming with frame-level control — this cannot be mapped to n8n’s batch-oriented data flow.
+
+**What you can do:**
+- Use `stt-async-v4` model for high-quality async transcription (supports up to 5 hours of audio).
+- For real-time use cases, integrate the [Soniox WebSocket API](https://soniox.com/docs/stt/api-reference/websocket-api) directly in your application code outside of n8n.
 
 ## Resources
 

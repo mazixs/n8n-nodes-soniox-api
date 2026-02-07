@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-02-07
+
+### Breaking Changes
+- **Output format:** Transcription result now returns `text` at the top level instead of nested `transcript.text`. Tokens are no longer included by default (see **Include Tokens** option).
+- **Context parameter:** Single `context` string field replaced with 4 structured fields (`Context: General`, `Context: Text`, `Context: Terms`, `Context: Translation Terms`) matching the Soniox API v4 JSON format.
+- **Translation parameter:** `Translation Languages` (comma-separated string) replaced with `Translation Type` (`one_way`/`two_way`) + `Target Language` / `Language A` + `Language B`.
+- **Language parameter:** `Language` (single string) replaced with `Language Hints` (comma-separated codes) + `Language Hints Strict` (boolean).
+
+### Added
+- **Real-time Limitations section** in README — explicit documentation that WebSocket real-time transcription is not supported, with technical justification (n8n `execute()` model incompatible with persistent WebSocket streams).
+- **Include Tokens option** — Token-level data (word timestamps, confidence, speaker, language) is now opt-in via Options → Include Tokens (default: `false`). Clean text output by default.
+- **Language Hints Strict** — Option to restrict transcription to specified languages only.
+- **Enable Language Identification** — Detect spoken language per segment.
+- **Webhook support** — `Webhook URL`, `Webhook Auth Header Name/Value` for async notifications.
+- **Client Reference ID** — Optional tracking identifier for transcriptions.
+- **Structured Context (JSON)** — 4 context sections matching Soniox API v4:
+  - `Context: General (JSON)` — Key-value pairs for domain, topic, participants.
+  - `Context: Text` — Free-form background text.
+  - `Context: Terms` — Comma-separated domain-specific words.
+  - `Context: Translation Terms (JSON)` — Source-target translation pairs.
+- **`getAll` backward compatibility** — `returnAll`/`limit` fields now visible for both `list` and deprecated `getAll` operations.
+
+### Fixed
+- **CRITICAL: Pagination** — `sonioxApiRequestAllItems` rewritten from broken offset-based to cursor-based pagination (`next_page_cursor`). This was the root cause of "only 1 model returned" bug.
+- **CRITICAL: File upload response** — API returns `id`, not `file_id`. Fixed in `FileHandler.upload`.
+- **CRITICAL: File list response** — `responseData.items` → `responseData.files`.
+- **CRITICAL: Transcription list** — Added `Array.isArray` check for `returnAll=true` (flat array from `sonioxApiRequestAllItems`) vs `false` (object with `.transcriptions` key).
+- **Removed `includeNonFinal`** from async API — this parameter is only valid for WebSocket real-time, not REST.
+- **Removed duplicate fields** — Cleaned up duplicate `returnAll`/`limit` definitions in `TranscriptionDescription.ts`.
+- **`getByFile` response parsing** — Fixed `response.items` → `response.transcriptions` (was never updated).
+
+### Improved
+- **Latency: Immediate first poll** — Polling loop now checks status immediately after creating transcription instead of sleeping first. Saves up to 5 seconds on short audio files.
+- **Latency: Fire-and-forget cleanup** — File/transcription deletion no longer blocks result delivery. DELETE requests run in background.
+- **Fallback models updated** — `en_v2`/`en_v2_lowlatency` → `stt-rt-v4`, `stt-async-v4`, `stt-rt-v3`, `stt-async-v3`.
+
+### Updated
+- **n8n-core:** 2.4.3 → 2.7.0
+- **n8n-workflow:** 2.4.3 → 2.7.0
+- **fast-xml-parser override:** Added `^5.3.4` to fix RangeError DoS vulnerability (19 high severity → 0).
+- **docs/SONIOX_API_OFFICIAL.md** updated to v2.0:
+  - Models: v3 → v4 (with alias table and deprecation timeline).
+  - Audio duration limit: 60 min → 5 hours.
+  - Upload response: `file_id` → `id`.
+  - Models response: detailed object structure with `transcription_mode`, `languages[]`.
+  - Best practices: version pinning to v4.
+
 ## [0.6.1] - 2026-01-23
 
 ### Maintenance

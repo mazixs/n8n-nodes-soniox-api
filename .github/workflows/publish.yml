@@ -6,86 +6,88 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 0.1.0)'
+        description: 'Version to publish (e.g., 0.7.0)'
         required: true
         type: string
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      
+      contents: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Run lint
         run: npm run lint
-        
+
       - name: Build package
         run: npm run build
-        
-      - name: Verify dist directory
+
+      - name: Verify build output
         run: |
           if [ ! -d "dist" ]; then
-            echo "Error: dist directory not found"
+            echo "::error::dist directory not found after build"
             exit 1
           fi
-          echo "Contents of dist:"
           ls -la dist/
-          
-      - name: Update version from release tag
-        if: github.event_name == 'release'
+
+      - name: Resolve target version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "Current version: $CURRENT_VERSION"
-          echo "Target version: $VERSION"
-          if [ "$CURRENT_VERSION" != "$VERSION" ]; then
-            echo "Updating version to $VERSION"
-            npm version $VERSION --no-git-tag-version
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            echo "Version already matches, skipping update"
+            VERSION="$INPUT_VERSION"
           fi
-          
-      - name: Update version from input
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION=${{ github.event.inputs.version }}
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "Current version: $CURRENT_VERSION"
-          echo "Target version: $VERSION"
-          if [ "$CURRENT_VERSION" != "$VERSION" ]; then
-            echo "Updating version to $VERSION"
-            npm version $VERSION --no-git-tag-version
-          else
-            echo "Version already matches, skipping update"
-          fi
-          
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "target=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Current: $CURRENT → Target: $VERSION"
+
+      - name: Update package.json version
+        if: steps.version.outputs.current != steps.version.outputs.target
+        env:
+          VERSION: ${{ steps.version.outputs.target }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Dry-run publish
+        run: npm publish --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          
-      - name: Create release branch
-        if: github.event_name == 'release'
+
+      - name: Verify publication
+        env:
+          VERSION: ${{ steps.version.outputs.target }}
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          BRANCH_NAME="release/v$VERSION"
-          echo "Creating release branch: $BRANCH_NAME"
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git checkout -b $BRANCH_NAME
-          git push origin $BRANCH_NAME
+          echo "⏳ Waiting for npm registry to update..."
+          sleep 15
+          PUBLISHED=$(npm view n8n-nodes-soniox-api version 2>/dev/null || echo "not found")
+          echo "📦 Published version: $PUBLISHED"
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "✅ Successfully published v$VERSION to npm"
+          else
+            echo "::warning::Registry shows $PUBLISHED, expected $VERSION. May need a few minutes to propagate."
+          fi

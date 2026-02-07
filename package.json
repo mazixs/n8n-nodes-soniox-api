@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-soniox-api",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "n8n node for Soniox Speech-to-Text API",
   "main": "index.js",
   "scripts": {
@@ -54,8 +54,8 @@
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "gulp": "^5.0.0",
-    "n8n-core": "2.4.3",
-    "n8n-workflow": "2.4.3",
+    "n8n-core": "2.7.0",
+    "n8n-workflow": "2.7.0",
     "typescript": "^5.9.0"
   },
   "peerDependencies": {
@@ -66,6 +66,7 @@
     "qs": "^6.14.1",
     "lodash": "^4.17.21",
     "jws": "^3.2.3",
-    "@langchain/core": "^0.3.80"
+    "@langchain/core": "^0.3.80",
+    "fast-xml-parser": "^5.3.4"
   }
 }
