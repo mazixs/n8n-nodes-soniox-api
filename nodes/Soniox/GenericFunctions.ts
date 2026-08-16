@@ -1,99 +1,141 @@
 import {
+	IDataObject,
 	IExecuteFunctions,
 	IHookFunctions,
-	ILoadOptionsFunctions,
-	IDataObject,
 	IHttpRequestMethods,
-	IRequestOptions,
+	IHttpRequestOptions,
+	ILoadOptionsFunctions,
+	JsonObject,
 	NodeApiError,
+	sleep,
 } from 'n8n-workflow';
 
 import {
-	API_LIMITS,
-	CONTENT_TYPES,
-	RETRY_CONFIG,
-	TIMEOUTS,
-	RETRYABLE_STATUS_CODES,
-} from './constants';
+	buildRequestOptions,
+	extractSonioxErrorDetails,
+	getRetryDelayMs,
+	isRetryableSonioxError,
+} from './api/RequestUtils';
+import { API_LIMITS, RETRY_CONFIG, TIMEOUTS } from './constants';
 
-/**
- * Задержка с exponential backoff
- */
-async function delay(attempt: number): Promise<void> {
-	const delayMs = Math.min(
-		RETRY_CONFIG.BASE_DELAY * Math.pow(RETRY_CONFIG.BACKOFF_MULTIPLIER, attempt),
-		RETRY_CONFIG.MAX_DELAY,
-	);
-	return new Promise((resolve) => setTimeout(resolve, delayMs));
+type SonioxContext = IHookFunctions | IExecuteFunctions | ILoadOptionsFunctions;
+
+interface SonioxRequestOptions {
+	formData?: FormData;
+}
+
+function buildApiErrorResponse(error: unknown): JsonObject {
+	const details = extractSonioxErrorDetails(error);
+	const response: JsonObject = {
+		error_type: details.errorType ?? 'request_failed',
+		error_message: details.message,
+	};
+
+	if (details.requestId) response.request_id = details.requestId;
+	if (details.moreInfo) response.more_info = details.moreInfo;
+	if (details.validationErrors !== undefined) {
+		response.validation_errors = JSON.stringify(details.validationErrors);
+	}
+
+	return response;
+}
+
+function formatApiErrorDescription(error: unknown): string {
+	const details = extractSonioxErrorDetails(error);
+	const parts = [`Error type: ${details.errorType ?? 'unknown'}`];
+	if (details.requestId) parts.push(`Request ID: ${details.requestId}`);
+	if (details.validationErrors !== undefined) {
+		parts.push(
+			`Validation details: ${JSON.stringify(details.validationErrors)}`,
+		);
+	}
+	if (details.moreInfo) parts.push(`More information: ${details.moreInfo}`);
+	return parts.join('\n');
+}
+
+async function callAuthenticatedRequest(
+	context: SonioxContext,
+	options: IHttpRequestOptions,
+): Promise<IDataObject> {
+	const modernHelper = context.helpers.httpRequestWithAuthentication;
+	if (typeof modernHelper === 'function') {
+		return (await modernHelper.call(
+			context,
+			'sonioxApi',
+			options,
+		)) as IDataObject;
+	}
+
+	// Older n8n versions exposed only the legacy helper. Keep a dynamic fallback
+	// so the package can still run there without importing deprecated types.
+	const helperCollection = context.helpers as unknown as Record<
+		string,
+		unknown
+	>;
+	const legacyHelper = helperCollection.requestWithAuthentication;
+	if (typeof legacyHelper !== 'function') {
+		throw new Error(
+			'This n8n version does not provide an authenticated HTTP helper.',
+		);
+	}
+
+	const legacyOptions: Record<string, unknown> = {
+		...options,
+		uri: options.url,
+	};
+	if (typeof FormData !== 'undefined' && options.body instanceof FormData) {
+		legacyOptions.formData = options.body;
+		delete legacyOptions.body;
+	}
+
+	return (await legacyHelper.call(
+		context,
+		'sonioxApi',
+		legacyOptions,
+	)) as IDataObject;
 }
 
 export async function sonioxApiRequest(
-	this: IHookFunctions | IExecuteFunctions | ILoadOptionsFunctions,
+	this: SonioxContext,
 	method: IHttpRequestMethods,
 	endpoint: string,
 	body: IDataObject = {},
 	qs: IDataObject = {},
 	uri?: string,
-	option: IDataObject = {},
-): Promise<any> {
+	option: SonioxRequestOptions = {},
+): Promise<IDataObject> {
 	const credentials = await this.getCredentials('sonioxApi');
-
-	const options: IRequestOptions = {
+	const apiUrl = String(credentials.apiUrl ?? '').replace(/\/$/, '');
+	const requestUrl = uri || `${apiUrl}${endpoint}`;
+	const requestOptions = buildRequestOptions({
 		method,
+		url: requestUrl,
 		qs,
-		uri: uri || `${credentials.apiUrl}${endpoint}`,
-		json: true,
+		body,
+		formData: option.formData,
 		timeout: option.formData ? TIMEOUTS.FILE_UPLOAD : TIMEOUTS.API_REQUEST,
-	};
+	}) as IHttpRequestOptions;
 
-	// Headers - Authorization будет добавлен через credentials.authenticate
-	options.headers = {};
-
-	// Handle multipart/form-data (для file upload)
-	if (option.formData) {
-		options.formData = option.formData as IDataObject;
-		// Content-Type устанавливается автоматически для multipart
-	} else {
-		// Обычный JSON request
-		options.body = body;
-		options.headers['Content-Type'] = CONTENT_TYPES.JSON;
-	}
-
-	// Retry логика с exponential backoff
-	let lastError: any;
+	let lastError: unknown;
 	for (let attempt = 0; attempt <= RETRY_CONFIG.MAX_RETRIES; attempt++) {
 		try {
-			return await this.helpers.requestWithAuthentication.call(this, 'sonioxApi', options);
-		} catch (error: any) {
+			return await callAuthenticatedRequest(this, requestOptions);
+		} catch (error: unknown) {
 			lastError = error;
-
-			const statusCode = error.statusCode || error.response?.statusCode;
-
-			// Проверяем, нужен ли retry
-			const shouldRetry =
-				attempt < RETRY_CONFIG.MAX_RETRIES &&
-				(RETRYABLE_STATUS_CODES.includes(statusCode) || error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET');
-
-			if (!shouldRetry) {
+			if (attempt >= RETRY_CONFIG.MAX_RETRIES || !isRetryableSonioxError(error))
 				break;
-			}
 
-			// Обработка rate limiting (429)
-			if (statusCode === 429) {
-				const retryAfter = error.response?.headers['retry-after'];
-				if (retryAfter) {
-					const waitMs = parseInt(retryAfter, 10) * 1000;
-					await new Promise((resolve) => setTimeout(resolve, waitMs));
-					continue;
-				}
-			}
-
-			// Exponential backoff для остальных ошибок
-			await delay(attempt);
+			const details = extractSonioxErrorDetails(error);
+			await sleep(getRetryDelayMs(attempt, details.retryAfter));
 		}
 	}
 
-	throw new NodeApiError(this.getNode(), lastError);
+	const details = extractSonioxErrorDetails(lastError);
+	throw new NodeApiError(this.getNode(), buildApiErrorResponse(lastError), {
+		message: details.message,
+		description: formatApiErrorDescription(lastError),
+		httpCode: details.statusCode?.toString(),
+	});
 }
 
 export async function sonioxApiRequestAllItems(
@@ -103,26 +145,48 @@ export async function sonioxApiRequestAllItems(
 	body: IDataObject = {},
 	qs: IDataObject = {},
 	itemsKey?: string,
-): Promise<any> {
+): Promise<IDataObject[]> {
 	const returnData: IDataObject[] = [];
-	let responseData;
-	qs.limit = API_LIMITS.PAGINATION_LIMIT;
-
-	// Determine the response key based on endpoint
-	const key = itemsKey || (endpoint.includes('/files') ? 'files' : endpoint.includes('/transcriptions') ? 'transcriptions' : 'items');
+	const key =
+		itemsKey ||
+		(endpoint.includes('/files')
+			? 'files'
+			: endpoint.includes('/transcriptions')
+				? 'transcriptions'
+				: 'items');
+	let cursor: string | undefined;
 
 	do {
-		responseData = await sonioxApiRequest.call(this, method, endpoint, body, qs);
-		const items = responseData[key] || [];
-		returnData.push(...items);
+		const pageQs: IDataObject = {
+			...qs,
+			limit: API_LIMITS.PAGINATION_LIMIT,
+		};
+		if (cursor) pageQs.cursor = cursor;
 
-		// Soniox API uses cursor-based pagination
-		if (responseData.next_page_cursor) {
-			qs.cursor = responseData.next_page_cursor;
-		} else {
-			break;
+		const responseData = await sonioxApiRequest.call(
+			this,
+			method,
+			endpoint,
+			body,
+			pageQs,
+		);
+		const response = Array.isArray(responseData) ? {} : responseData;
+		const items = response[key];
+		if (Array.isArray(items)) {
+			returnData.push(
+				...items.filter(
+					(item): item is IDataObject =>
+						typeof item === 'object' && item !== null,
+				),
+			);
 		}
-	} while (true);
+
+		const nextCursor = response.next_page_cursor;
+		cursor =
+			typeof nextCursor === 'string' && nextCursor.length > 0
+				? nextCursor
+				: undefined;
+	} while (cursor);
 
 	return returnData;
 }

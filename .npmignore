@@ -1,7 +1,17 @@
 node_modules/
+coverage/
+.nyc_output/
+.vitest/
+.codex/
+*.log
+*.tgz
+tests/
+*.test.ts
+*.spec.ts
 *.ts
 !dist/**/*.d.ts
 tsconfig.json
+vitest.config.mts
 .gitignore
 eslint.config.mjs
 .editorconfig
@@ -9,4 +19,3 @@ eslint.config.mjs
 docs/
 *.md
 !README.md
-gulpfile.js

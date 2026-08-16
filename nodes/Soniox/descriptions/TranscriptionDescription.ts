@@ -1,5 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 import { API_LIMITS } from '../constants';
+import { localLimitsField } from './LimitDescription';
 
 export const transcriptionOperations: INodeProperties[] = [
 	{
@@ -14,10 +15,18 @@ export const transcriptionOperations: INodeProperties[] = [
 		},
 		options: [
 			{
-				name: 'Transcribe',
-				value: 'transcribe',
-				description: 'Upload audio and transcribe in one step (recommended)',
-				action: 'Transcribe audio file',
+				name: 'Create [Deprecated] → Transcribe',
+				value: 'create',
+				description:
+					'Deprecated: Use "Transcribe" instead. Retained for workflows created with older versions.',
+				action: 'Create a transcription',
+			},
+			{
+				name: 'Create and Wait [Deprecated] → Transcribe',
+				value: 'createAndWait',
+				description:
+					'Deprecated: Use "Transcribe" instead. Retained for workflows created with older versions.',
+				action: 'Create and wait for transcription',
 			},
 			{
 				name: 'Get',
@@ -26,28 +35,23 @@ export const transcriptionOperations: INodeProperties[] = [
 				action: 'Get transcription',
 			},
 			{
+				name: 'Get By File [Deprecated] → Get',
+				value: 'getByFile',
+				description:
+					'Deprecated: Use "Get" instead. Retained for workflows created with older versions.',
+				action: 'Get transcription by file',
+			},
+			{
 				name: 'List',
 				value: 'list',
 				description: 'List all transcriptions',
 				action: 'List transcriptions',
 			},
 			{
-				name: 'Create and Wait [Deprecated] → Transcribe',
-				value: 'createAndWait',
-				description: 'Deprecated: Use "Transcribe" instead - this will be removed in v0.6.0',
-				action: 'Create and wait for transcription [Deprecated]',
-			},
-			{
-				name: 'Create [Deprecated] → Transcribe',
-				value: 'create',
-				description: 'Deprecated: Use "Transcribe" instead - this will be removed in v0.6.0',
-				action: 'Create a transcription [Deprecated]',
-			},
-			{
-				name: 'Get By File [Deprecated] → Get',
-				value: 'getByFile',
-				description: 'Deprecated: Use "Get" instead - this will be removed in v0.6.0',
-				action: 'Get transcription by file [Deprecated]',
+				name: 'Transcribe',
+				value: 'transcribe',
+				description: 'Upload audio and transcribe in one step (recommended)',
+				action: 'Transcribe audio file',
 			},
 		],
 		default: 'transcribe',
@@ -108,18 +112,19 @@ export const transcriptionFields: INodeProperties[] = [
 				source: ['url'],
 			},
 		},
-		description: 'URL of the audio file to transcribe. Must be accessible by Soniox servers.',
+		description:
+			'URL of the audio file to transcribe. Must be accessible by Soniox servers.',
 		placeholder: 'https://example.com/audio.mp3',
 	},
 	// Transcribe operation - Model
 	{
-		displayName: 'Model',
+		displayName: 'Model Name or ID',
 		name: 'model',
 		type: 'options',
 		typeOptions: {
 			loadOptionsMethod: 'getModels',
 		},
-		default: '',
+		default: 'stt-async-v5',
 		required: true,
 		displayOptions: {
 			show: {
@@ -127,7 +132,8 @@ export const transcriptionFields: INodeProperties[] = [
 				operation: ['transcribe'],
 			},
 		},
-		description: 'The model to use for transcription (loaded from Soniox API)',
+		description:
+			'The model to use for transcription (loaded from Soniox API). Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 		placeholder: 'Select a model',
 	},
 	// Transcribe operation - Additional Fields
@@ -145,19 +151,13 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Language Hints',
-				name: 'languageHints',
+				displayName: 'Client Reference ID',
+				name: 'clientReferenceId',
 				type: 'string',
 				default: '',
-				description: 'Comma-separated expected language codes in the audio (e.g., en,ru,es). If not specified, languages are auto-detected.',
-				placeholder: 'en,ru',
-			},
-			{
-				displayName: 'Language Hints Strict',
-				name: 'languageHintsStrict',
-				type: 'boolean',
-				default: false,
-				description: 'Whether the model should rely more on language hints (restrict to specified languages)',
+				description:
+					'Optional tracking identifier string (does not need to be unique)',
+				placeholder: 'my-job-123',
 			},
 			{
 				displayName: 'Context: General (JSON)',
@@ -167,8 +167,19 @@ export const transcriptionFields: INodeProperties[] = [
 					rows: 4,
 				},
 				default: '',
-				description: 'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
-				placeholder: '[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				description:
+					'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				placeholder:
+					'[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+			},
+			{
+				displayName: 'Context: Terms',
+				name: 'contextTerms',
+				type: 'string',
+				default: '',
+				description:
+					'Comma-separated domain-specific or uncommon words to improve transcription accuracy',
+				placeholder: 'Celebrex, Zyrtec, Amoxicillin',
 			},
 			{
 				displayName: 'Context: Text',
@@ -178,16 +189,10 @@ export const transcriptionFields: INodeProperties[] = [
 					rows: 4,
 				},
 				default: '',
-				description: 'Free-form background text to expand on general context (e.g., meeting notes, prior interactions, reference documents)',
-				placeholder: 'The customer contacted support to update their auto policy after purchasing a new vehicle.',
-			},
-			{
-				displayName: 'Context: Terms',
-				name: 'contextTerms',
-				type: 'string',
-				default: '',
-				description: 'Comma-separated domain-specific or uncommon words to improve transcription accuracy',
-				placeholder: 'Celebrex, Zyrtec, Amoxicillin',
+				description:
+					'Free-form background text to expand on general context (e.g., meeting notes, prior interactions, reference documents)',
+				placeholder:
+					'The customer contacted support to update their auto policy after purchasing a new vehicle.',
 			},
 			{
 				displayName: 'Context: Translation Terms (JSON)',
@@ -197,44 +202,25 @@ export const transcriptionFields: INodeProperties[] = [
 					rows: 3,
 				},
 				default: '',
-				description: 'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}]',
+				description:
+					'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}].',
 				placeholder: '[{"source":"MRI","target":"RM"}]',
 			},
 			{
-				displayName: 'Translation Type',
-				name: 'translationType',
-				type: 'options',
-				options: [
-					{
-						name: 'None',
-						value: '',
-					},
-					{
-						name: 'One-Way',
-						value: 'one_way',
-						description: 'Translate transcript into a single target language',
-					},
-					{
-						name: 'Two-Way',
-						value: 'two_way',
-						description: 'Bilingual translation between two languages',
-					},
-				],
-				default: '',
-				description: 'Type of translation to apply to the transcription',
+				displayName: 'Enable Language Identification',
+				name: 'enableLanguageIdentification',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to detect language for each part of the transcription',
 			},
 			{
-				displayName: 'Target Language',
-				name: 'targetLanguage',
-				type: 'string',
-				default: '',
-				description: 'Language code to translate the transcript into (for one-way translation)',
-				placeholder: 'es',
-				displayOptions: {
-					show: {
-						translationType: ['one_way'],
-					},
-				},
+				displayName: 'Enable Speaker Diarization',
+				name: 'enableSpeakerDiarization',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to enable speaker diarization (identify different speakers)',
 			},
 			{
 				displayName: 'Language A',
@@ -263,26 +249,58 @@ export const transcriptionFields: INodeProperties[] = [
 				},
 			},
 			{
-				displayName: 'Enable Speaker Diarization',
-				name: 'enableSpeakerDiarization',
-				type: 'boolean',
-				default: false,
-				description: 'Whether to enable speaker diarization (identify different speakers)',
-			},
-			{
-				displayName: 'Enable Language Identification',
-				name: 'enableLanguageIdentification',
-				type: 'boolean',
-				default: false,
-				description: 'Whether to detect language for each part of the transcription',
-			},
-			{
-				displayName: 'Webhook URL',
-				name: 'webhookUrl',
+				displayName: 'Language Hints',
+				name: 'languageHints',
 				type: 'string',
 				default: '',
-				description: 'URL to receive webhook notification when transcription completes or fails',
-				placeholder: 'https://example.com/webhook',
+				description:
+					'Comma-separated expected language codes in the audio (e.g., en,ru,es). If not specified, languages are auto-detected.',
+				placeholder: 'en,ru',
+			},
+			{
+				displayName: 'Language Hints Strict',
+				name: 'languageHintsStrict',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether the model should rely more on language hints (restrict to specified languages)',
+			},
+			{
+				displayName: 'Target Language',
+				name: 'targetLanguage',
+				type: 'string',
+				default: '',
+				description:
+					'Language code to translate the transcript into (for one-way translation)',
+				placeholder: 'es',
+				displayOptions: {
+					show: {
+						translationType: ['one_way'],
+					},
+				},
+			},
+			{
+				displayName: 'Translation Type',
+				name: 'translationType',
+				type: 'options',
+				options: [
+					{
+						name: 'None',
+						value: '',
+					},
+					{
+						name: 'One-Way',
+						value: 'one_way',
+						description: 'Translate transcript into a single target language',
+					},
+					{
+						name: 'Two-Way',
+						value: 'two_way',
+						description: 'Bilingual translation between two languages',
+					},
+				],
+				default: '',
+				description: 'Type of translation to apply to the transcription',
 			},
 			{
 				displayName: 'Webhook Auth Header Name',
@@ -301,12 +319,13 @@ export const transcriptionFields: INodeProperties[] = [
 				description: 'Value of the authentication header for webhook requests',
 			},
 			{
-				displayName: 'Client Reference ID',
-				name: 'clientReferenceId',
+				displayName: 'Webhook URL',
+				name: 'webhookUrl',
 				type: 'string',
 				default: '',
-				description: 'Optional tracking identifier string (does not need to be unique)',
-				placeholder: 'my-job-123',
+				description:
+					'URL to receive webhook notification when transcription completes or fails',
+				placeholder: 'https://example.com/webhook',
 			},
 		],
 	},
@@ -325,46 +344,52 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
+				displayName: 'Check Interval (Seconds)',
+				name: 'checkInterval',
+				type: 'number',
+				default: 5,
+				description:
+					'How often to check transcription status (default: 5 seconds)',
+				typeOptions: {
+					minValue: 1,
+					maxValue: 60,
+				},
+			},
+			{
 				displayName: 'Delete Audio File',
 				name: 'deleteAudioFile',
 				type: 'boolean',
 				default: true,
-				description: 'Whether to delete the uploaded audio file from Soniox servers after transcription completes',
+				description:
+					'Whether to delete the uploaded audio file from Soniox servers after transcription completes',
 			},
 			{
 				displayName: 'Delete Transcription',
 				name: 'deleteTranscription',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to delete the transcription from Soniox servers after retrieval. Useful for privacy and staying within API limits.',
+				description:
+					'Whether to delete the transcription from Soniox servers after retrieval. Useful for privacy and staying within API limits.',
 			},
 			{
 				displayName: 'Include Tokens',
 				name: 'includeTokens',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to include detailed token-level data (word timestamps, confidence, speaker, language) in the output. When disabled, only clean text is returned.',
+				description:
+					'Whether to include detailed token-level data (word timestamps, confidence, speaker, language) in the output. When disabled, only clean text is returned.',
 			},
+			localLimitsField,
 			{
-				displayName: 'Max Wait Time (seconds)',
+				displayName: 'Max Wait Time (Seconds)',
 				name: 'maxWaitTime',
 				type: 'number',
 				default: 300,
-				description: 'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
+				description:
+					'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
 				typeOptions: {
 					minValue: 10,
 					maxValue: 18000,
-				},
-			},
-			{
-				displayName: 'Check Interval (seconds)',
-				name: 'checkInterval',
-				type: 'number',
-				default: 5,
-				description: 'How often to check transcription status (default: 5 seconds)',
-				typeOptions: {
-					minValue: 1,
-					maxValue: 60,
 				},
 			},
 		],
@@ -402,6 +427,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayName: 'Limit',
 		name: 'limit',
 		type: 'number',
+		default: 50,
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
@@ -413,7 +439,6 @@ export const transcriptionFields: INodeProperties[] = [
 			minValue: 1,
 			maxValue: API_LIMITS.MAX_ITEMS_PER_REQUEST,
 		},
-		default: API_LIMITS.DEFAULT_LIMIT,
 		description: 'Max number of results to return',
 	},
 	// Create and Create and Wait operations - File ID
@@ -433,13 +458,13 @@ export const transcriptionFields: INodeProperties[] = [
 	},
 	// Create and Create and Wait operations - Model
 	{
-		displayName: 'Model',
+		displayName: 'Model Name or ID',
 		name: 'model',
 		type: 'options',
 		typeOptions: {
 			loadOptionsMethod: 'getModels',
 		},
-		default: '',
+		default: 'stt-async-v5',
 		required: true,
 		displayOptions: {
 			show: {
@@ -447,7 +472,8 @@ export const transcriptionFields: INodeProperties[] = [
 				operation: ['create', 'createAndWait'],
 			},
 		},
-		description: 'The model to use for transcription (loaded from Soniox API)',
+		description:
+			'The model to use for transcription (loaded from Soniox API). Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 		placeholder: 'Select a model',
 	},
 	// Create and Create and Wait operations - Additional Fields
@@ -465,21 +491,6 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Language Hints',
-				name: 'languageHints',
-				type: 'string',
-				default: '',
-				description: 'Comma-separated expected language codes in the audio (e.g., en,ru,es). If not specified, languages are auto-detected.',
-				placeholder: 'en,ru',
-			},
-			{
-				displayName: 'Language Hints Strict',
-				name: 'languageHintsStrict',
-				type: 'boolean',
-				default: false,
-				description: 'Whether the model should rely more on language hints (restrict to specified languages)',
-			},
-			{
 				displayName: 'Context: General (JSON)',
 				name: 'contextGeneral',
 				type: 'string',
@@ -487,8 +498,19 @@ export const transcriptionFields: INodeProperties[] = [
 					rows: 4,
 				},
 				default: '',
-				description: 'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
-				placeholder: '[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				description:
+					'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				placeholder:
+					'[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+			},
+			{
+				displayName: 'Context: Terms',
+				name: 'contextTerms',
+				type: 'string',
+				default: '',
+				description:
+					'Comma-separated domain-specific or uncommon words to improve transcription accuracy',
+				placeholder: 'Celebrex, Zyrtec, Amoxicillin',
 			},
 			{
 				displayName: 'Context: Text',
@@ -498,16 +520,10 @@ export const transcriptionFields: INodeProperties[] = [
 					rows: 4,
 				},
 				default: '',
-				description: 'Free-form background text to expand on general context (e.g., meeting notes, prior interactions, reference documents)',
-				placeholder: 'The customer contacted support to update their auto policy after purchasing a new vehicle.',
-			},
-			{
-				displayName: 'Context: Terms',
-				name: 'contextTerms',
-				type: 'string',
-				default: '',
-				description: 'Comma-separated domain-specific or uncommon words to improve transcription accuracy',
-				placeholder: 'Celebrex, Zyrtec, Amoxicillin',
+				description:
+					'Free-form background text to expand on general context (e.g., meeting notes, prior interactions, reference documents)',
+				placeholder:
+					'The customer contacted support to update their auto policy after purchasing a new vehicle.',
 			},
 			{
 				displayName: 'Context: Translation Terms (JSON)',
@@ -517,44 +533,25 @@ export const transcriptionFields: INodeProperties[] = [
 					rows: 3,
 				},
 				default: '',
-				description: 'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}]',
+				description:
+					'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}].',
 				placeholder: '[{"source":"MRI","target":"RM"}]',
 			},
 			{
-				displayName: 'Translation Type',
-				name: 'translationType',
-				type: 'options',
-				options: [
-					{
-						name: 'None',
-						value: '',
-					},
-					{
-						name: 'One-Way',
-						value: 'one_way',
-						description: 'Translate transcript into a single target language',
-					},
-					{
-						name: 'Two-Way',
-						value: 'two_way',
-						description: 'Bilingual translation between two languages',
-					},
-				],
-				default: '',
-				description: 'Type of translation to apply to the transcription',
+				displayName: 'Enable Language Identification',
+				name: 'enableLanguageIdentification',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to detect language for each part of the transcription',
 			},
 			{
-				displayName: 'Target Language',
-				name: 'targetLanguage',
-				type: 'string',
-				default: '',
-				description: 'Language code to translate the transcript into (for one-way translation)',
-				placeholder: 'es',
-				displayOptions: {
-					show: {
-						translationType: ['one_way'],
-					},
-				},
+				displayName: 'Enable Speaker Diarization',
+				name: 'enableSpeakerDiarization',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to enable speaker diarization (identify different speakers)',
 			},
 			{
 				displayName: 'Language A',
@@ -583,18 +580,58 @@ export const transcriptionFields: INodeProperties[] = [
 				},
 			},
 			{
-				displayName: 'Enable Speaker Diarization',
-				name: 'enableSpeakerDiarization',
-				type: 'boolean',
-				default: false,
-				description: 'Whether to enable speaker diarization (identify different speakers)',
+				displayName: 'Language Hints',
+				name: 'languageHints',
+				type: 'string',
+				default: '',
+				description:
+					'Comma-separated expected language codes in the audio (e.g., en,ru,es). If not specified, languages are auto-detected.',
+				placeholder: 'en,ru',
 			},
 			{
-				displayName: 'Enable Language Identification',
-				name: 'enableLanguageIdentification',
+				displayName: 'Language Hints Strict',
+				name: 'languageHintsStrict',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to detect language for each part of the transcription',
+				description:
+					'Whether the model should rely more on language hints (restrict to specified languages)',
+			},
+			{
+				displayName: 'Target Language',
+				name: 'targetLanguage',
+				type: 'string',
+				default: '',
+				description:
+					'Language code to translate the transcript into (for one-way translation)',
+				placeholder: 'es',
+				displayOptions: {
+					show: {
+						translationType: ['one_way'],
+					},
+				},
+			},
+			{
+				displayName: 'Translation Type',
+				name: 'translationType',
+				type: 'options',
+				options: [
+					{
+						name: 'None',
+						value: '',
+					},
+					{
+						name: 'One-Way',
+						value: 'one_way',
+						description: 'Translate transcript into a single target language',
+					},
+					{
+						name: 'Two-Way',
+						value: 'two_way',
+						description: 'Bilingual translation between two languages',
+					},
+				],
+				default: '',
+				description: 'Type of translation to apply to the transcription',
 			},
 		],
 	},
@@ -613,25 +650,28 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		options: [
 			{
-				displayName: 'Max Wait Time (seconds)',
-				name: 'maxWaitTime',
-				type: 'number',
-				default: 300,
-				description: 'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
-				typeOptions: {
-					minValue: 10,
-					maxValue: 18000,
-				},
-			},
-			{
-				displayName: 'Check Interval (seconds)',
+				displayName: 'Check Interval (Seconds)',
 				name: 'checkInterval',
 				type: 'number',
 				default: 5,
-				description: 'How often to check transcription status (default: 5 seconds)',
+				description:
+					'How often to check transcription status (default: 5 seconds)',
 				typeOptions: {
 					minValue: 1,
 					maxValue: 60,
+				},
+			},
+			localLimitsField,
+			{
+				displayName: 'Max Wait Time (Seconds)',
+				name: 'maxWaitTime',
+				type: 'number',
+				default: 300,
+				description:
+					'Maximum time to wait for transcription completion (default: 300 seconds = 5 minutes)',
+				typeOptions: {
+					minValue: 10,
+					maxValue: 18000,
 				},
 			},
 		],

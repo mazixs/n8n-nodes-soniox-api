@@ -1,157 +1,56 @@
-# CI/CD Pipeline Documentation
+# CI/CD
 
-**Updated:** 2026-02-07 (v0.7.0)
-
-## Overview
-
-GitHub Actions automate:
-- **CI** — lint, build, audit across Node.js 18/20/22
-- **Release** — version bump, tag, GitHub Release (with CI gate)
-- **Publish** — dry-run → npm publish → verification
-
----
+Updated 2026-08-16 for the `0.8.x` toolchain.
 
 ## Workflows
 
-### 1. `ci.yml` — Continuous Integration
+### `ci.yml`
 
-**Triggers:** push/PR to `main`/`develop`, reusable via `workflow_call`
+Runs on pushes and pull requests to `main` and `develop`, and can be called by the release workflow. The matrix uses Node.js `22.22.0` and `24` and runs:
 
-**Key features:**
-- **Node.js matrix:** 18, 20, 22 (`fail-fast: false`)
-- **Concurrency:** `ci-${{ github.ref }}` — cancels duplicate runs
-- **Steps:** checkout → install → lint → build → verify dist → security audit → package size check
-
----
-
-### 2. `create-release.yml` — Release Creation
-
-**Trigger:** Manual `workflow_dispatch` with `version` + `prerelease` inputs.
-
-**Key features:**
-- **CI gate:** runs full CI pipeline before release (`needs: ci`)
-- **CHANGELOG validation:** blocks release if no `## [X.Y.Z]` entry exists
-- **Shell injection prevention:** all user inputs via `env:` vars, not inline `${{ }}`
-- **Concurrency:** `release` group (no cancel)
-- **Git author:** `github-actions[bot]`
-- **Idempotent commit:** skips if no changes to commit
-
-**Flow:**
-1. Run CI (matrix 18/20/22)
-2. Validate version format + tag uniqueness
-3. Verify CHANGELOG entry exists
-4. Update `package.json` version
-5. Extract release notes from CHANGELOG
-6. Commit + push + tag `vX.Y.Z`
-7. Create GitHub Release
-
-**Downstream:** GitHub Release triggers `publish.yml` automatically.
-
----
-
-### 3. `publish.yml` — npm Publishing
-
-**Triggers:** GitHub Release `published` or manual `workflow_dispatch`.
-
-**Key features:**
-- **Unified version resolution:** single step handles both release tag and manual input
-- **Dry-run before publish:** catches issues before actual publish
-- **Post-publish verification:** checks npm registry after publish
-- **Concurrency:** `publish` group (no cancel)
-- **Permissions:** `contents: read` only (no write needed)
-
-**Flow:**
-1. Checkout → install → lint → build → verify dist
-2. Resolve target version (from tag or input)
-3. `npm publish --dry-run` (safety check)
-4. `npm publish --access public`
-5. Verify publication on npm registry
-
----
-
-## GitHub Secrets
-
-| Secret | Purpose | How to get |
-|--------|---------|------------|
-| `NPM_TOKEN` | npm publish auth | [npmjs.com → Access Tokens](https://www.npmjs.com/settings/~/tokens) (Automation type) |
-| `GITHUB_TOKEN` | Auto-injected | Provided by GitHub Actions |
-
----
-
-## Release Process
-
-```
-feature branch → PR → CI validates → merge to main
-                                         ↓
-                              update CHANGELOG.md
-                              update package.json version
-                                         ↓
-                              run create-release.yml
-                              (CI gate → validate → tag → GitHub Release)
-                                         ↓
-                              publish.yml auto-triggers
-                              (dry-run → publish → verify)
-                                         ↓
-                              package live on npm ✅
+```text
+npm ci
+npm run check
+npm run typecheck
+npm audit --omit=dev
+npm pack --dry-run
 ```
 
-### Semantic Versioning
+`npm run check` performs the n8n community-node lint, unit tests, build, and package dry-run.
 
-| Bump | When | Example |
-|------|------|---------|
-| PATCH | Bug fixes only | `0.7.0 → 0.7.1` |
-| MINOR | New features (backward-compatible) | `0.7.0 → 0.8.0` |
-| MAJOR | Breaking changes | `0.7.0 → 1.0.0` |
+### `create-release.yml`
 
----
+Manual release workflow. It runs CI first, validates the semantic version and changelog entry, updates the package version, commits the release version, creates tag `vX.Y.Z`, and opens a GitHub Release. Publishing starts when that release is published.
 
-## Branch Structure
+### `publish.yml`
 
+Publishes on a published GitHub Release or by manual dispatch. It uses npm Trusted Publishers with GitHub Actions OIDC:
+
+- `permissions.id-token: write` and `contents: read`;
+- Node.js `24` and npm registry configuration;
+- no `NPM_TOKEN` and no `NODE_AUTH_TOKEN`;
+- dry-run, real publish, and registry verification.
+
+Configure the trusted publisher in npm package settings with:
+
+```text
+Owner: mazixs
+Repository: n8n-nodes-soniox-api
+Workflow filename: publish.yml
 ```
-main          — stable production branch
-├── develop   — integration branch
-├── feature/* — new functionality
-└── hotfix/*  — urgent fixes
-```
 
----
+This configuration is external to the repository and must be completed before the first OIDC publish. npm Trusted Publishers require a current npm CLI and a supported GitHub-hosted runner.
 
-## Local Development
+## Local checks
 
 ```bash
-# Pre-commit checklist
-npm run lint          # Check code style
-npm run lintfix       # Auto-fix lint issues
-npm run build         # TypeScript + icons
-npm audit             # Security check
-npm pack --dry-run    # Preview package contents
-
-# Replay CI locally (requires act: https://github.com/nektos/act)
-act -j lint-and-build
+npm ci
+npm run lint
+npm test
+npm run build
+npm run typecheck
+npm pack --dry-run
+npm audit --omit=dev
 ```
 
----
-
-## Troubleshooting
-
-### `npm publish 403 Forbidden`
-- `NPM_TOKEN` expired → rotate in GitHub Secrets
-- Version already published → bump version
-- Check: `npm view n8n-nodes-soniox-api versions`
-
-### Build failed in CI
-- Reproduce locally: `npm ci && npm run lint && npm run build`
-- Check Node.js version compatibility (18/20/22)
-
-### Release exists but package missing on npm
-1. Check `publish.yml` logs in Actions tab
-2. Manual publish: `git checkout vX.Y.Z && npm ci && npm run build && npm publish --access public`
-
----
-
-## References
-
-- [GitHub Actions](https://docs.github.com/en/actions)
-- [npm Publishing](https://docs.npmjs.com/cli/v10/commands/npm-publish)
-- [Semantic Versioning](https://semver.org/)
-- [Keep a Changelog](https://keepachangelog.com/)
+Do not add npm tokens to GitHub Secrets or commit credentials. The automatically provided `GITHUB_TOKEN` is used only by the release workflow to push its version commit, tag, and release.

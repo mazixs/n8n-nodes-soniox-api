@@ -4,9 +4,17 @@ import {
 	INodeExecutionData,
 	NodeOperationError,
 } from 'n8n-workflow';
-import { Readable } from 'stream';
-import { sonioxApiRequest, sonioxApiRequestAllItems } from '../GenericFunctions';
+import {
+	sonioxApiRequest,
+	sonioxApiRequestAllItems,
+} from '../GenericFunctions';
+import { createFileFormData } from '../binaryUtils';
 import { CONTENT_TYPES } from '../constants';
+import {
+	BinaryMetadata,
+	parseLocalLimitOptions,
+	validateLocalLimits,
+} from '../limits';
 
 export async function fileHandler(
 	this: IExecuteFunctions,
@@ -18,8 +26,14 @@ export async function fileHandler(
 
 	if (operation === 'upload') {
 		// 1. Получить параметры
-		const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
+		const binaryPropertyName = this.getNodeParameter(
+			'binaryPropertyName',
+			i,
+		) as string;
 		const fileName = this.getNodeParameter('fileName', i, '') as string;
+		const limits = parseLocalLimitOptions(
+			this.getNodeParameter('limits', i, {}),
+		);
 
 		// 2. Валидация binary data
 		const itemBinary = items[i].binary;
@@ -43,7 +57,11 @@ export async function fileHandler(
 
 		// MIME Type Validation (Pre-flight)
 		const mimeType = binaryData.mimeType;
-		if (mimeType && !mimeType.startsWith('audio/') && !mimeType.startsWith('video/')) {
+		if (
+			mimeType &&
+			!mimeType.startsWith('audio/') &&
+			!mimeType.startsWith('video/')
+		) {
 			throw new NodeOperationError(
 				this.getNode(),
 				`Invalid file type: ${mimeType}. Only audio and video files are supported (e.g., audio/mp3, video/mp4).`,
@@ -51,28 +69,28 @@ export async function fileHandler(
 			);
 		}
 
-		// 3. Получить Stream из binary data (Memory Optimization)
-		let stream: Readable;
-		if (binaryData.id) {
-			stream = await this.helpers.getBinaryStream(binaryData.id);
-		} else {
-			const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-			stream = Readable.from(buffer);
-		}
+		// The modern n8n HTTP helper accepts the platform FormData implementation.
+		const buffer = await this.helpers.getBinaryDataBuffer(
+			i,
+			binaryPropertyName,
+		);
+		validateLocalLimits(
+			{
+				...(binaryData as unknown as BinaryMetadata),
+				fileSize: buffer.length,
+			},
+			limits,
+		);
 
 		// 4. Определить имя файла
 		const uploadFileName = fileName || binaryData.fileName || 'file';
 
 		// 5. Подготовить formData для multipart/form-data
-		const formData = {
-			file: {
-				value: stream,
-				options: {
-					filename: uploadFileName,
-					contentType: binaryData.mimeType || CONTENT_TYPES.BINARY,
-				},
-			},
-		};
+		const formData = createFileFormData(
+			buffer,
+			uploadFileName,
+			binaryData.mimeType || CONTENT_TYPES.BINARY,
+		);
 
 		// 6. Upload через API
 		const response = await sonioxApiRequest.call(
@@ -87,7 +105,16 @@ export async function fileHandler(
 
 		// 7. Вернуть результат (с полным ответом API + удобные поля)
 		// API returns 'id' (not 'file_id')
-		const fileId = response.id || response.file_id;
+		const fileId = String(response.id ?? response.file_id ?? '');
+		if (!fileId) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'File upload failed: Soniox did not return a file ID.',
+				{
+					itemIndex: i,
+				},
+			);
+		}
 		returnData.push({
 			json: {
 				// Convenient fields for easy access
@@ -100,10 +127,9 @@ export async function fileHandler(
 				// Full API response
 				...response,
 			},
+			pairedItem: { item: i },
 		});
-	}
-
-	else if (operation === 'get') {
+	} else if (operation === 'get') {
 		const fileId = this.getNodeParameter('fileId', i) as string;
 
 		const response = await sonioxApiRequest.call(
@@ -112,20 +138,14 @@ export async function fileHandler(
 			`/files/${fileId}`,
 		);
 
-		returnData.push({ json: response });
-	}
-
-	else if (operation === 'list' || operation === 'getAll') {
+		returnData.push({ json: response, pairedItem: { item: i } });
+	} else if (operation === 'list' || operation === 'getAll') {
 		// Support both 'list' (new) and 'getAll' (deprecated) for backward compatibility
 		const returnAll = this.getNodeParameter('returnAll', i);
 
 		let responseData;
 		if (returnAll) {
-			responseData = await sonioxApiRequestAllItems.call(
-				this,
-				'GET',
-				'/files',
-			);
+			responseData = await sonioxApiRequestAllItems.call(this, 'GET', '/files');
 		} else {
 			const limit = this.getNodeParameter('limit', i);
 			responseData = await sonioxApiRequest.call(
@@ -137,26 +157,26 @@ export async function fileHandler(
 			);
 		}
 
-		const fileItems = Array.isArray(responseData) ? responseData : responseData.files || [];
+		const fileItems = Array.isArray(responseData)
+			? responseData
+			: Array.isArray(responseData.files)
+				? responseData.files
+				: [];
 		fileItems.forEach((item: IDataObject) => {
-			returnData.push({ json: item });
+			if (typeof item === 'object' && item !== null)
+				returnData.push({ json: item, pairedItem: { item: i } });
 		});
-	}
-
-	else if (operation === 'delete') {
+	} else if (operation === 'delete') {
 		const fileId = this.getNodeParameter('fileId', i) as string;
 
-		await sonioxApiRequest.call(
-			this,
-			'DELETE',
-			`/files/${fileId}`,
-		);
+		await sonioxApiRequest.call(this, 'DELETE', `/files/${fileId}`);
 
 		returnData.push({
 			json: {
 				success: true,
 				fileId,
 			},
+			pairedItem: { item: i },
 		});
 	}
 

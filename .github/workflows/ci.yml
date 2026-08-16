@@ -12,12 +12,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-build:
+  quality:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
-      matrix:
-        node-version: [18, 20, 22]
       fail-fast: false
+      matrix:
+        node-version: ['22.22.0', '24']
 
     steps:
       - name: Checkout code
@@ -27,31 +29,19 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run lint
-        run: npm run lint
+      - name: Run quality checks
+        run: npm run check
 
-      - name: Build package
-        run: npm run build
+      - name: Type-check source
+        run: npm run typecheck
 
-      - name: Verify build output
-        run: |
-          if [ ! -d "dist" ]; then
-            echo "::error::dist directory not found after build"
-            exit 1
-          fi
-          echo "Build successful! Contents of dist:"
-          ls -la dist/
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
 
-      - name: Security audit
-        run: npm audit --omit=dev || true
-
-      - name: Check package size
-        run: |
-          SIZE=$(du -sh dist/ | cut -f1)
-          echo "📦 Package size: $SIZE"
-          npm pack --dry-run 2>&1 | tail -5
+      - name: Show package contents
+        run: npm pack --dry-run

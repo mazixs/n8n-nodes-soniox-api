@@ -1,5 +1,28 @@
 # Refactoring & Audit Results
 
+> The sections below record historical releases. For the current implementation, see `docs/SPEC.md` and `docs/SONIOX_API_OFFICIAL.md`. The 0.8.x release uses n8n's `FormData` helper path rather than the old Node `Readable` upload path and no longer uses npm dependency overrides.
+
+## v0.8.0 — Current modernization (2026-08-16)
+
+### Changes
+
+- Migrated build, development, and lint commands to `@n8n/node-cli`.
+- Replaced the primary deprecated authenticated request helper with `httpRequestWithAuthentication` and `IHttpRequestOptions`; a dynamic fallback remains for older n8n installations.
+- Updated async model discovery and defaults to `stt-async-v5` while preserving saved legacy model IDs and operation aliases.
+- Added handling for Soniox's current `failed` async status alongside legacy `error`.
+- Made temporary file/transcription cleanup best effort across success, failure, and timeout paths.
+- Added optional local file-size and duration guards without hard-coding account-specific quotas.
+- Added Vitest unit tests for request options, pagination, retries, models, limits, and structured failures.
+- Replaced npm token publishing with npm Trusted Publishers through GitHub Actions OIDC.
+
+### Verification
+
+- `npm run lint` — passes.
+- `npm run typecheck` — passes.
+- `npm test` — passes without live Soniox credentials.
+- `npm run build` — passes and copies static assets.
+- `npm audit --omit=dev` — no runtime vulnerabilities.
+
 ---
 
 ## v0.6.0 — Architecture Refactor (2026-01-23)
