@@ -13,7 +13,40 @@ export const transcriptionOperations: INodeProperties[] = [
 				resource: ['transcription'],
 			},
 		},
+		// The recommended path intentionally comes first; legacy values remain unchanged.
+		// eslint-disable-next-line n8n-nodes-base/node-param-options-type-unsorted-items -- preserve the guided UX order
 		options: [
+			{
+				name: 'Transcribe',
+				value: 'transcribe',
+				description: 'Upload audio and transcribe in one step (recommended)',
+				action: 'Transcribe audio file',
+			},
+			{
+				name: 'Create Job',
+				value: 'createJob',
+				description:
+					'Create an asynchronous transcription job and return its IDs without polling',
+				action: 'Create a transcription job',
+			},
+			{
+				name: 'Get Job Status',
+				value: 'get',
+				description: 'Get the current status of a transcription job',
+				action: 'Get transcription job status',
+			},
+			{
+				name: 'Get Transcript',
+				value: 'getTranscript',
+				description: 'Get the transcript for a completed transcription job',
+				action: 'Get transcription transcript',
+			},
+			{
+				name: 'List',
+				value: 'list',
+				description: 'List all transcriptions',
+				action: 'List transcriptions',
+			},
 			{
 				name: 'Create [Deprecated] → Transcribe',
 				value: 'create',
@@ -29,29 +62,11 @@ export const transcriptionOperations: INodeProperties[] = [
 				action: 'Create and wait for transcription',
 			},
 			{
-				name: 'Get',
-				value: 'get',
-				description: 'Get existing transcription result by ID',
-				action: 'Get transcription',
-			},
-			{
 				name: 'Get By File [Deprecated] → Get',
 				value: 'getByFile',
 				description:
 					'Deprecated: Use "Get" instead. Retained for workflows created with older versions.',
 				action: 'Get transcription by file',
-			},
-			{
-				name: 'List',
-				value: 'list',
-				description: 'List all transcriptions',
-				action: 'List transcriptions',
-			},
-			{
-				name: 'Transcribe',
-				value: 'transcribe',
-				description: 'Upload audio and transcribe in one step (recommended)',
-				action: 'Transcribe audio file',
 			},
 		],
 		default: 'transcribe',
@@ -82,6 +97,34 @@ export const transcriptionFields: INodeProperties[] = [
 		},
 		description: 'Source of the audio file to transcribe',
 	},
+	{
+		displayName: 'Job Source',
+		name: 'jobSource',
+		type: 'options',
+		options: [
+			{
+				name: 'Binary Property',
+				value: 'binary',
+			},
+			{
+				name: 'URL',
+				value: 'url',
+			},
+			{
+				name: 'Existing File ID',
+				value: 'fileId',
+			},
+		],
+		default: 'binary',
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['createJob'],
+			},
+		},
+		description:
+			'Choose whether to upload a binary file, submit a public URL, or use an existing Soniox file',
+	},
 	// Transcribe operation - Binary Property Name
 	{
 		displayName: 'Binary Property',
@@ -94,6 +137,21 @@ export const transcriptionFields: INodeProperties[] = [
 				resource: ['transcription'],
 				operation: ['transcribe'],
 				source: ['binary'],
+			},
+		},
+		description: 'Name of the binary property containing the audio file',
+	},
+	{
+		displayName: 'Binary Property',
+		name: 'binaryPropertyName',
+		type: 'string',
+		default: 'data',
+		required: true,
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['createJob'],
+				jobSource: ['binary'],
 			},
 		},
 		description: 'Name of the binary property containing the audio file',
@@ -116,6 +174,38 @@ export const transcriptionFields: INodeProperties[] = [
 			'URL of the audio file to transcribe. Must be accessible by Soniox servers.',
 		placeholder: 'https://example.com/audio.mp3',
 	},
+	{
+		displayName: 'Audio URL',
+		name: 'fileUrl',
+		type: 'string',
+		default: '',
+		required: true,
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['createJob'],
+				jobSource: ['url'],
+			},
+		},
+		description:
+			'Public URL of the audio file. Soniox servers must be able to access it.',
+		placeholder: 'https://example.com/audio.mp3',
+	},
+	{
+		displayName: 'File ID',
+		name: 'fileId',
+		type: 'string',
+		default: '',
+		required: true,
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['createJob'],
+				jobSource: ['fileId'],
+			},
+		},
+		description: 'Existing Soniox file ID to transcribe',
+	},
 	// Transcribe operation - Model
 	{
 		displayName: 'Model Name or ID',
@@ -129,7 +219,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['transcribe'],
+				operation: ['transcribe', 'createJob'],
 			},
 		},
 		description:
@@ -146,7 +236,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['transcribe'],
+				operation: ['transcribe', 'createJob'],
 			},
 		},
 		options: [
@@ -159,9 +249,9 @@ export const transcriptionFields: INodeProperties[] = [
 					'Optional tracking identifier string (does not need to be unique)',
 				placeholder: 'my-job-123',
 			},
-			{
-				displayName: 'Context: General (JSON)',
-				name: 'contextGeneral',
+				{
+					displayName: 'Context: General (Legacy JSON)',
+					name: 'contextGeneral',
 				type: 'string',
 				typeOptions: {
 					rows: 4,
@@ -169,9 +259,40 @@ export const transcriptionFields: INodeProperties[] = [
 				default: '',
 				description:
 					'Structured key-value pairs as JSON array. Helps the model adapt to the correct domain. Example: [{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
-				placeholder:
-					'[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
-			},
+					placeholder:
+						'[{"key":"domain","value":"Healthcare"},{"key":"topic","value":"Consultation"}]',
+				},
+				{
+					displayName: 'Context: General (Structured)',
+					name: 'contextGeneralUi',
+					type: 'fixedCollection',
+					typeOptions: { multipleValues: true },
+					default: {},
+					description:
+						'Add domain or topic key-value pairs. Use either this editor or the legacy JSON field, not both.',
+					options: [
+						{
+							displayName: 'Entry',
+							name: 'generalValues',
+							values: [
+								{
+									displayName: 'Key',
+									name: 'key',
+									type: 'string',
+									default: '',
+									placeholder: 'domain',
+								},
+								{
+									displayName: 'Value',
+									name: 'value',
+									type: 'string',
+									default: '',
+									placeholder: 'Healthcare',
+								},
+							],
+						},
+					],
+				},
 			{
 				displayName: 'Context: Terms',
 				name: 'contextTerms',
@@ -194,8 +315,8 @@ export const transcriptionFields: INodeProperties[] = [
 				placeholder:
 					'The customer contacted support to update their auto policy after purchasing a new vehicle.',
 			},
-			{
-				displayName: 'Context: Translation Terms (JSON)',
+				{
+					displayName: 'Context: Translation Terms (Legacy JSON)',
 				name: 'contextTranslationTerms',
 				type: 'string',
 				typeOptions: {
@@ -204,8 +325,39 @@ export const transcriptionFields: INodeProperties[] = [
 				default: '',
 				description:
 					'JSON array of source-target translation pairs. Example: [{"source":"MRI","target":"RM"},{"source":"stroke","target":"ictus"}].',
-				placeholder: '[{"source":"MRI","target":"RM"}]',
-			},
+					placeholder: '[{"source":"MRI","target":"RM"}]',
+				},
+				{
+					displayName: 'Context: Translation Terms (Structured)',
+					name: 'contextTranslationTermsUi',
+					type: 'fixedCollection',
+					typeOptions: { multipleValues: true },
+					default: {},
+					description:
+						'Add source-target translation pairs. Use either this editor or the legacy JSON field, not both.',
+					options: [
+						{
+							displayName: 'Translation Term',
+							name: 'translationTermValues',
+							values: [
+								{
+									displayName: 'Source',
+									name: 'source',
+									type: 'string',
+									default: '',
+									placeholder: 'MRI',
+								},
+								{
+									displayName: 'Target',
+									name: 'target',
+									type: 'string',
+									default: '',
+									placeholder: 'RM',
+								},
+							],
+						},
+					],
+				},
 			{
 				displayName: 'Enable Language Identification',
 				name: 'enableLanguageIdentification',
@@ -376,9 +528,9 @@ export const transcriptionFields: INodeProperties[] = [
 				name: 'includeTokens',
 				type: 'boolean',
 				default: false,
-				description:
-					'Whether to include detailed token-level data (word timestamps, confidence, speaker, language) in the output. When disabled, only clean text is returned.',
-			},
+					description:
+						'Whether to include detailed token-level data (word timestamps, confidence, speaker, language) in the output. When disabled, only clean text is returned.',
+				},
 			localLimitsField,
 			{
 				displayName: 'Max Wait Time (Seconds)',
@@ -393,9 +545,37 @@ export const transcriptionFields: INodeProperties[] = [
 				},
 			},
 		],
-	},
-	// Get operation
-	{
+		},
+		// Get operation
+		{
+			displayName:
+				'Create Job returns IDs immediately. Use Get Job Status and Get Transcript as separate steps.',
+			name: 'createJobNotice',
+			type: 'notice',
+			default: '',
+			displayOptions: {
+				show: {
+					resource: ['transcription'],
+					operation: ['createJob'],
+				},
+			},
+		},
+		{
+			displayName: 'Options',
+			name: 'options',
+			type: 'collection',
+			placeholder: 'Add Option',
+			default: {},
+			displayOptions: {
+				show: {
+					resource: ['transcription'],
+					operation: ['createJob'],
+				},
+			},
+			options: [localLimitsField],
+		},
+		// Get operation
+		{
 		displayName: 'Transcription ID',
 		name: 'transcriptionId',
 		type: 'string',
@@ -404,7 +584,7 @@ export const transcriptionFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['transcription'],
-				operation: ['get'],
+				operation: ['get', 'getTranscript'],
 			},
 		},
 		description: 'The ID of the transcription',
@@ -440,6 +620,19 @@ export const transcriptionFields: INodeProperties[] = [
 			maxValue: API_LIMITS.MAX_ITEMS_PER_REQUEST,
 		},
 		description: 'Max number of results to return',
+	},
+	{
+		displayName:
+			'Compatibility operations are retained for existing workflows. Use Transcribe or Create Job for new workflows.',
+		name: 'transcriptionCompatibilityNotice',
+		type: 'notice',
+		default: '',
+		displayOptions: {
+			show: {
+				resource: ['transcription'],
+				operation: ['create', 'createAndWait', 'getByFile'],
+			},
+		},
 	},
 	// Create and Create and Wait operations - File ID
 	{
@@ -661,7 +854,6 @@ export const transcriptionFields: INodeProperties[] = [
 					maxValue: 60,
 				},
 			},
-			localLimitsField,
 			{
 				displayName: 'Max Wait Time (Seconds)',
 				name: 'maxWaitTime',
@@ -676,22 +868,7 @@ export const transcriptionFields: INodeProperties[] = [
 			},
 		],
 	},
-	// Get operation
-	{
-		displayName: 'Transcription ID',
-		name: 'transcriptionId',
-		type: 'string',
-		default: '',
-		required: true,
-		displayOptions: {
-			show: {
-				resource: ['transcription'],
-				operation: ['get'],
-			},
-		},
-		description: 'The ID of the transcription',
-	},
-	// Get By File operation
+		// Get By File operation
 	{
 		displayName: 'File ID',
 		name: 'fileId',

@@ -2,6 +2,7 @@ import {
 	IExecuteFunctions,
 	IDataObject,
 	INodeExecutionData,
+	NodeApiError,
 	NodeOperationError,
 	sleep,
 } from 'n8n-workflow';
@@ -17,66 +18,9 @@ import {
 } from '../limits';
 import {
 	getTranscriptionFailureMessage,
+	buildContextObject,
 	isTerminalTranscriptionFailure,
 } from '../transcriptionUtils';
-
-/**
- * Builds the Soniox context object from individual UI fields.
- * API expects: { general: [{key,value}], text: string, terms: string[], translation_terms: [{source,target}] }
- */
-function buildContextObject(
-	additionalFields: IDataObject,
-): IDataObject | undefined {
-	const context: IDataObject = {};
-	let hasContext = false;
-
-	if (additionalFields.contextGeneral) {
-		try {
-			const general = JSON.parse(additionalFields.contextGeneral as string);
-			if (Array.isArray(general) && general.length > 0) {
-				context.general = general;
-				hasContext = true;
-			}
-		} catch {
-			// Invalid JSON — skip silently, user will see no effect
-		}
-	}
-
-	if (additionalFields.contextText) {
-		const text = (additionalFields.contextText as string).trim();
-		if (text.length > 0) {
-			context.text = text;
-			hasContext = true;
-		}
-	}
-
-	if (additionalFields.contextTerms) {
-		const terms = (additionalFields.contextTerms as string)
-			.split(',')
-			.map((t) => t.trim())
-			.filter((t) => t.length > 0);
-		if (terms.length > 0) {
-			context.terms = terms;
-			hasContext = true;
-		}
-	}
-
-	if (additionalFields.contextTranslationTerms) {
-		try {
-			const translationTerms = JSON.parse(
-				additionalFields.contextTranslationTerms as string,
-			);
-			if (Array.isArray(translationTerms) && translationTerms.length > 0) {
-				context.translation_terms = translationTerms;
-				hasContext = true;
-			}
-		} catch {
-			// Invalid JSON — skip silently
-		}
-	}
-
-	return hasContext ? context : undefined;
-}
 
 /**
  * Groups tokens by speaker into conversation segments.
@@ -140,6 +84,192 @@ async function cleanupResource(
 	}
 }
 
+interface TranscriptionSource {
+	fileId?: string;
+	audioUrl?: string;
+}
+
+interface UploadedFile {
+	fileId: string;
+}
+
+const MIN_POLL_SECONDS = 0.1;
+const MAX_POLL_INTERVAL_SECONDS = 60;
+const MAX_WAIT_SECONDS = 18_000;
+const MAX_POLL_REQUESTS = 10_000;
+
+function getPollingSeconds(
+	context: IExecuteFunctions,
+	options: IDataObject,
+	name: string,
+	label: string,
+	defaultValue: number,
+	maxValue: number,
+	itemIndex: number,
+): number {
+	const rawValue = options[name];
+	if (rawValue === undefined || rawValue === null || rawValue === '')
+		return defaultValue;
+
+	const value = Number(rawValue);
+	if (
+		!Number.isFinite(value) ||
+		value < MIN_POLL_SECONDS ||
+		value > maxValue
+	) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`${label} must be between ${MIN_POLL_SECONDS} and ${maxValue} seconds.`,
+			{ itemIndex },
+		);
+	}
+
+	return value;
+}
+
+async function uploadBinaryFile(
+	context: IExecuteFunctions,
+	items: INodeExecutionData[],
+	itemIndex: number,
+	binaryPropertyName: string,
+	localLimits: ReturnType<typeof parseLocalLimitOptions>,
+	fileNameOverride?: string,
+): Promise<UploadedFile> {
+	const binaryData = items[itemIndex].binary;
+	if (!binaryData || !binaryData[binaryPropertyName]) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`No binary data found in property "${binaryPropertyName}". Please provide audio file data.`,
+			{ itemIndex },
+		);
+	}
+
+	const binary = binaryData[binaryPropertyName];
+	const mimeType = binary.mimeType;
+	if (
+		mimeType &&
+		!mimeType.startsWith('audio/') &&
+		!mimeType.startsWith('video/')
+	) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`Invalid file type: ${mimeType}. Only audio and video files are supported (e.g., audio/mp3, video/mp4).`,
+			{ itemIndex },
+		);
+	}
+	// Reject known metadata limits before materializing the binary buffer.
+	validateLocalLimits(binary as unknown as BinaryMetadata, localLimits);
+
+	const buffer = await context.helpers.getBinaryDataBuffer(
+		itemIndex,
+		binaryPropertyName,
+	);
+	validateLocalLimits(
+		{
+			...(binary as unknown as BinaryMetadata),
+			fileSize: buffer.length,
+		},
+		localLimits,
+	);
+
+	const fileName =
+		fileNameOverride ||
+		binary.fileName ||
+		`audio_${Date.now()}.${binary.fileExtension || 'mp3'}`;
+	const formData = createFileFormData(
+		buffer,
+		fileName,
+		mimeType || 'application/octet-stream',
+	);
+	const response = await sonioxApiRequest.call(
+		context,
+		'POST',
+		'/files',
+		{},
+		{},
+		undefined,
+		{ formData },
+	);
+	const rawFileId = response.id ?? response.file_id;
+	const fileId = typeof rawFileId === 'string' ? rawFileId : '';
+	if (!fileId) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'File upload failed: Soniox did not return a file ID.',
+			{ itemIndex },
+		);
+	}
+
+	return { fileId };
+}
+
+function buildTranscriptionRequestBody(
+	model: string,
+	additionalFields: IDataObject,
+	source: TranscriptionSource,
+): IDataObject {
+	const requestBody: IDataObject = { model: model.trim() };
+	if (source.fileId) requestBody.file_id = source.fileId;
+	else if (source.audioUrl) requestBody.audio_url = source.audioUrl;
+
+	if (additionalFields.languageHints) {
+		const hints = String(additionalFields.languageHints)
+			.split(',')
+			.map((language) => language.trim())
+			.filter((language) => language.length > 0);
+		if (hints.length > 0) requestBody.language_hints = hints;
+	}
+	if (additionalFields.languageHintsStrict)
+		requestBody.language_hints_strict = additionalFields.languageHintsStrict;
+
+	const context = buildContextObject(additionalFields);
+	if (context) requestBody.context = context;
+
+	const translationType = additionalFields.translationType;
+	if (translationType === 'one_way' && additionalFields.targetLanguage) {
+		requestBody.translation = {
+			type: 'one_way',
+			target_language: additionalFields.targetLanguage,
+		};
+	} else if (
+		translationType === 'two_way' &&
+		additionalFields.languageA &&
+		additionalFields.languageB
+	) {
+		requestBody.translation = {
+			type: 'two_way',
+			language_a: additionalFields.languageA,
+			language_b: additionalFields.languageB,
+		};
+	}
+
+	if (additionalFields.enableSpeakerDiarization)
+		requestBody.enable_speaker_diarization =
+			additionalFields.enableSpeakerDiarization;
+	if (additionalFields.enableLanguageIdentification)
+		requestBody.enable_language_identification =
+			additionalFields.enableLanguageIdentification;
+
+	if (additionalFields.webhookUrl) {
+		requestBody.webhook_url = additionalFields.webhookUrl;
+		if (additionalFields.webhookAuthHeaderName)
+			requestBody.webhook_auth_header_name =
+				additionalFields.webhookAuthHeaderName;
+		if (additionalFields.webhookAuthHeaderValue)
+			requestBody.webhook_auth_header_value =
+				additionalFields.webhookAuthHeaderValue;
+	}
+	if (additionalFields.clientReferenceId)
+		requestBody.client_reference_id = additionalFields.clientReferenceId;
+
+	return requestBody;
+}
+
+function getTranscriptionId(response: IDataObject): string | undefined {
+	const rawId = response.transcription_id ?? response.id;
+	return rawId === undefined || rawId === null ? undefined : String(rawId);
+}
+
 export async function transcriptionHandler(
 	this: IExecuteFunctions,
 	operation: string,
@@ -148,7 +278,136 @@ export async function transcriptionHandler(
 	const returnData: INodeExecutionData[] = [];
 	const items = this.getInputData();
 
-	if (operation === 'transcribe') {
+	if (operation === 'createJob') {
+		const source = this.getNodeParameter('jobSource', i, 'binary') as string;
+		const model = this.getNodeParameter('model', i, '') as string;
+		const additionalFields = this.getNodeParameter(
+			'additionalFields',
+			i,
+			{},
+		) as IDataObject;
+		const options = this.getNodeParameter('options', i, {}) as IDataObject;
+		const localLimits = parseLocalLimitOptions(options.limits);
+		let uploadedFileId: string | undefined;
+		let sourceFileId: string | undefined;
+
+		if (!model.trim()) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Model is required. Please select a model from the dropdown.',
+				{ itemIndex: i },
+			);
+		}
+
+		try {
+			let sourceData: TranscriptionSource;
+			if (source === 'binary') {
+				const binaryPropertyName = this.getNodeParameter(
+					'binaryPropertyName',
+					i,
+				) as string;
+				const uploaded = await uploadBinaryFile(
+					this,
+					items,
+					i,
+					binaryPropertyName,
+					localLimits,
+				);
+				uploadedFileId = uploaded.fileId;
+				sourceFileId = uploaded.fileId;
+				sourceData = { fileId: uploaded.fileId };
+			} else if (source === 'url') {
+				const audioUrl = String(
+					this.getNodeParameter('fileUrl', i, ''),
+				).trim();
+				if (!audioUrl) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Audio URL is required.',
+						{ itemIndex: i },
+					);
+				}
+				sourceData = { audioUrl };
+			} else if (source === 'fileId') {
+				const fileId = String(
+					this.getNodeParameter('fileId', i, ''),
+				).trim();
+				if (!fileId) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'File ID is required.',
+						{ itemIndex: i },
+					);
+				}
+				sourceFileId = fileId;
+				sourceData = { fileId };
+			} else {
+				throw new NodeOperationError(
+					this.getNode(),
+					`Unsupported job source: ${source}`,
+					{ itemIndex: i },
+				);
+			}
+
+			const requestBody = buildTranscriptionRequestBody(
+				model,
+				additionalFields,
+				sourceData,
+			);
+			const response = await sonioxApiRequest.call(
+				this,
+				'POST',
+				'/transcriptions',
+				requestBody,
+			);
+			const transcriptionId = getTranscriptionId(response);
+			if (!transcriptionId) {
+				throw new NodeOperationError(
+					this.getNode(),
+						'Failed to create transcription: Soniox did not return a transcription ID.',
+					{ itemIndex: i },
+				);
+			}
+
+			returnData.push({
+				json: {
+					...response,
+					transcriptionId,
+					...(sourceFileId ? { fileId: sourceFileId } : {}),
+				},
+				pairedItem: { item: i },
+			});
+		} catch (error) {
+			if (uploadedFileId)
+				await cleanupResource(
+					this,
+					`/files/${encodeURIComponent(uploadedFileId)}`,
+				);
+			if (error instanceof NodeApiError) {
+				throw new NodeApiError(
+					this.getNode(),
+					error.errorResponse ?? { error_message: error.message },
+					{
+						message: error.message,
+						description: error.description ?? undefined,
+						httpCode: error.httpCode ?? undefined,
+						itemIndex: i,
+					},
+				);
+			}
+			if (error instanceof NodeOperationError) {
+				throw new NodeOperationError(this.getNode(), error.message, {
+					description: error.description ?? undefined,
+					itemIndex: i,
+				});
+			}
+			throw new NodeOperationError(
+				this.getNode(),
+				error instanceof Error ? error : String(error),
+				{ itemIndex: i },
+			);
+		}
+	} else if (operation === 'transcribe') {
 		// All-in-one transcription: Upload → Create → Wait → Get Transcript
 		const source = this.getNodeParameter('source', i, 'binary') as string;
 		const model = this.getNodeParameter('model', i, '') as string;
@@ -178,174 +437,71 @@ export async function transcriptionHandler(
 				{ itemIndex: i },
 			);
 		}
-
-		if (source === 'binary') {
-			const binaryPropertyName = this.getNodeParameter(
-				'binaryPropertyName',
-				i,
-			) as string;
-
-			// Get binary data
-			const binaryData = items[i].binary;
-			if (!binaryData || !binaryData[binaryPropertyName]) {
-				throw new NodeOperationError(
-					this.getNode(),
-					`No binary data found in property "${binaryPropertyName}". Please provide audio file data.`,
-					{ itemIndex: i },
-				);
-			}
-
-			// MIME Type Validation (Pre-flight)
-			const mimeType = binaryData[binaryPropertyName].mimeType;
-			if (
-				mimeType &&
-				!mimeType.startsWith('audio/') &&
-				!mimeType.startsWith('video/')
-			) {
-				throw new NodeOperationError(
-					this.getNode(),
-					`Invalid file type: ${mimeType}. Only audio and video files are supported (e.g., audio/mp3, video/mp4).`,
-					{ itemIndex: i },
-				);
-			}
-
-			// Step 1: Upload file
-			const uploadFileName =
-				binaryData[binaryPropertyName].fileName ||
-				`audio_${Date.now()}.${binaryData[binaryPropertyName].fileExtension || 'mp3'}`;
-
-			const buffer = await this.helpers.getBinaryDataBuffer(
-				i,
-				binaryPropertyName,
-			);
-			validateLocalLimits(
-				{
-					...(binaryData[binaryPropertyName] as unknown as BinaryMetadata),
-					fileSize: buffer.length,
-				},
-				localLimits,
-			);
-
-			const formData = createFileFormData(
-				buffer,
-				uploadFileName,
-				binaryData[binaryPropertyName].mimeType || 'application/octet-stream',
-			);
-
-			const uploadResponse = await sonioxApiRequest.call(
-				this,
-				'POST',
-				'/files',
-				{},
-				{},
-				undefined,
-				{ formData },
-			);
-
-			// API returns 'id', not 'file_id'!
-			const uploadedFileId = uploadResponse.id ?? uploadResponse.file_id;
-			fileId = typeof uploadedFileId === 'string' ? uploadedFileId : undefined;
-
-			if (!fileId) {
-				throw new NodeOperationError(
-					this.getNode(),
-					`File upload failed: no id in response. Response: ${JSON.stringify(uploadResponse)}`,
-					{ itemIndex: i },
-				);
-			}
-		} else {
-			// URL source
-			audioUrl = this.getNodeParameter('fileUrl', i) as string;
-			if (!audioUrl) {
-				throw new NodeOperationError(this.getNode(), 'Audio URL is required', {
-					itemIndex: i,
-				});
-			}
-		}
-
-		// Step 2: Create transcription
-		const requestBody: IDataObject = {
-			model: model.trim(),
-		};
-
-		if (fileId) {
-			requestBody.file_id = fileId;
-		} else if (audioUrl) {
-			requestBody.audio_url = audioUrl;
-		}
-
-		// Add only specific fields from additionalFields (avoid sending audio_url accidentally)
-		if (additionalFields.languageHints) {
-			const hints = (additionalFields.languageHints as string)
-				.split(',')
-				.map((l) => l.trim())
-				.filter((l) => l.length > 0);
-			if (hints.length > 0) requestBody.language_hints = hints;
-		}
-
-		if (additionalFields.languageHintsStrict) {
-			requestBody.language_hints_strict = additionalFields.languageHintsStrict;
-		}
-
-		const contextObj = buildContextObject(additionalFields);
-		if (contextObj) requestBody.context = contextObj;
-
-		if (additionalFields.translationType) {
-			const translationType = additionalFields.translationType as string;
-			if (translationType === 'one_way' && additionalFields.targetLanguage) {
-				requestBody.translation = {
-					type: 'one_way',
-					target_language: additionalFields.targetLanguage,
-				};
-			} else if (
-				translationType === 'two_way' &&
-				additionalFields.languageA &&
-				additionalFields.languageB
-			) {
-				requestBody.translation = {
-					type: 'two_way',
-					language_a: additionalFields.languageA,
-					language_b: additionalFields.languageB,
-				};
-			}
-		}
-
-		if (additionalFields.enableSpeakerDiarization) {
-			requestBody.enable_speaker_diarization =
-				additionalFields.enableSpeakerDiarization;
-		}
-
-		if (additionalFields.enableLanguageIdentification) {
-			requestBody.enable_language_identification =
-				additionalFields.enableLanguageIdentification;
-		}
-
-		if (additionalFields.webhookUrl) {
-			requestBody.webhook_url = additionalFields.webhookUrl;
-			if (additionalFields.webhookAuthHeaderName) {
-				requestBody.webhook_auth_header_name =
-					additionalFields.webhookAuthHeaderName;
-			}
-			if (additionalFields.webhookAuthHeaderValue) {
-				requestBody.webhook_auth_header_value =
-					additionalFields.webhookAuthHeaderValue;
-			}
-		}
-
-		if (additionalFields.clientReferenceId) {
-			requestBody.client_reference_id = additionalFields.clientReferenceId;
-		}
-
-		// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
-		if (!requestBody.file_id && !requestBody.audio_url) {
-			throw new NodeOperationError(
-				this.getNode(),
-				`Neither file_id nor audio_url present in request body.`,
-				{ itemIndex: i },
-			);
-		}
+		const maxWaitTime = getPollingSeconds(
+			this,
+			options,
+			'maxWaitTime',
+			'Max wait time',
+			300,
+			MAX_WAIT_SECONDS,
+			i,
+		);
+		const checkInterval = getPollingSeconds(
+			this,
+			options,
+			'checkInterval',
+			'Check interval',
+			5,
+			MAX_POLL_INTERVAL_SECONDS,
+			i,
+		);
 
 		try {
+			if (source === 'binary') {
+				const binaryPropertyName = this.getNodeParameter(
+					'binaryPropertyName',
+					i,
+				) as string;
+				const uploaded = await uploadBinaryFile(
+					this,
+					items,
+					i,
+					binaryPropertyName,
+					localLimits,
+				);
+				fileId = uploaded.fileId;
+			} else {
+				// URL source
+				audioUrl = this.getNodeParameter('fileUrl', i) as string;
+				if (!audioUrl) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Audio URL is required',
+						{ itemIndex: i },
+					);
+				}
+			}
+
+			// Step 2: Create transcription. Keep this request builder shared with the
+			// modern and legacy operations so their Soniox payloads cannot drift apart.
+			const requestBody = buildTranscriptionRequestBody(
+				model,
+				additionalFields,
+				{
+					fileId,
+					audioUrl,
+				},
+			);
+
+			// CRITICAL: Ensure NO audio_url is sent (API requires ONLY file_id OR audio_url, not both)
+			if (!requestBody.file_id && !requestBody.audio_url) {
+				throw new NodeOperationError(
+					this.getNode(),
+					`Neither file_id nor audio_url present in request body.`,
+					{ itemIndex: i },
+				);
+			}
+
 			const createResponse = await sonioxApiRequest.call(
 				this,
 				'POST',
@@ -361,23 +517,26 @@ export async function transcriptionHandler(
 			if (!transcriptionId) {
 				throw new NodeOperationError(
 					this.getNode(),
-					`Failed to create transcription: API did not return transcription_id or id. Response: ${JSON.stringify(createResponse)}`,
+						'Failed to create transcription: Soniox did not return a transcription ID.',
 					{ itemIndex: i },
 				);
 			}
 
 			// Step 3: Poll for completion
-			const maxWaitTime = (options.maxWaitTime as number) || 300;
-			const checkInterval = (options.checkInterval as number) || 5;
 			const startTime = Date.now();
 			const maxWaitMs = maxWaitTime * 1000;
 			const checkIntervalMs = checkInterval * 1000;
 
 			let transcriptionResult: IDataObject | null = null;
 			let lastStatus = '';
+			let pollRequests = 0;
 
 			let isFirstPoll = true;
-			while (Date.now() - startTime < maxWaitMs) {
+			while (
+				Date.now() - startTime < maxWaitMs &&
+				pollRequests < MAX_POLL_REQUESTS
+			) {
+				pollRequests += 1;
 				// First poll immediately (short audio may already be done), then with interval
 				if (!isFirstPoll) {
 					await sleep(checkIntervalMs);
@@ -387,7 +546,7 @@ export async function transcriptionHandler(
 				const statusResponse = await sonioxApiRequest.call(
 					this,
 					'GET',
-					`/transcriptions/${transcriptionId}`,
+					`/transcriptions/${encodeURIComponent(transcriptionId)}`,
 				);
 				lastStatus = (statusResponse.status as string) || '';
 
@@ -397,7 +556,7 @@ export async function transcriptionHandler(
 					const transcriptResponse = await sonioxApiRequest.call(
 						this,
 						'GET',
-						`/transcriptions/${transcriptionId}/transcript`,
+						`/transcriptions/${encodeURIComponent(transcriptionId)}/transcript`,
 					);
 
 					// Build clean result: text at top level
@@ -452,9 +611,12 @@ export async function transcriptionHandler(
 			returnData.push({ json: transcriptionResult, pairedItem: { item: i } });
 		} finally {
 			if (deleteAudioFile && fileId)
-				await cleanupResource(this, `/files/${fileId}`);
+				await cleanupResource(this, `/files/${encodeURIComponent(fileId)}`);
 			if (deleteTranscription && transcriptionId)
-				await cleanupResource(this, `/transcriptions/${transcriptionId}`);
+				await cleanupResource(
+					this,
+					`/transcriptions/${encodeURIComponent(transcriptionId)}`,
+				);
 		}
 	} else if (operation === 'create') {
 		const fileId = this.getNodeParameter('fileId', i) as string;
@@ -496,55 +658,9 @@ export async function transcriptionHandler(
 			);
 		}
 
-		const requestBody: IDataObject = {
-			file_id: fileId.trim(),
-			model: model.trim(),
-		};
-
-		if (additionalFields.languageHints) {
-			const hints = (additionalFields.languageHints as string)
-				.split(',')
-				.map((l) => l.trim())
-				.filter((l) => l.length > 0);
-			if (hints.length > 0) requestBody.language_hints = hints;
-		}
-
-		if (additionalFields.languageHintsStrict) {
-			requestBody.language_hints_strict = additionalFields.languageHintsStrict;
-		}
-
-		const contextObj = buildContextObject(additionalFields);
-		if (contextObj) requestBody.context = contextObj;
-
-		if (additionalFields.translationType) {
-			const translationType = additionalFields.translationType as string;
-			if (translationType === 'one_way' && additionalFields.targetLanguage) {
-				requestBody.translation = {
-					type: 'one_way',
-					target_language: additionalFields.targetLanguage,
-				};
-			} else if (
-				translationType === 'two_way' &&
-				additionalFields.languageA &&
-				additionalFields.languageB
-			) {
-				requestBody.translation = {
-					type: 'two_way',
-					language_a: additionalFields.languageA,
-					language_b: additionalFields.languageB,
-				};
-			}
-		}
-
-		if (additionalFields.enableSpeakerDiarization) {
-			requestBody.enable_speaker_diarization =
-				additionalFields.enableSpeakerDiarization;
-		}
-
-		if (additionalFields.enableLanguageIdentification) {
-			requestBody.enable_language_identification =
-				additionalFields.enableLanguageIdentification;
-		}
+		const requestBody = buildTranscriptionRequestBody(model, additionalFields, {
+			fileId: fileId.trim(),
+		});
 
 		const response = await sonioxApiRequest.call(
 			this,
@@ -569,9 +685,6 @@ export async function transcriptionHandler(
 		delete additionalFields.audio_url;
 		delete additionalFields.audioUrl;
 
-		const maxWaitTime = (options.maxWaitTime as number) || 300;
-		const checkInterval = (options.checkInterval as number) || 5;
-
 		if (!fileId || !fileId.trim()) {
 			throw new NodeOperationError(this.getNode(), 'File ID is required', {
 				itemIndex: i,
@@ -593,52 +706,28 @@ export async function transcriptionHandler(
 				itemIndex: i,
 			});
 		}
+		const maxWaitTime = getPollingSeconds(
+			this,
+			options,
+			'maxWaitTime',
+			'Max wait time',
+			300,
+			MAX_WAIT_SECONDS,
+			i,
+		);
+		const checkInterval = getPollingSeconds(
+			this,
+			options,
+			'checkInterval',
+			'Check interval',
+			5,
+			MAX_POLL_INTERVAL_SECONDS,
+			i,
+		);
 
-		const body: IDataObject = { file_id: fileId.trim(), model: model.trim() };
-
-		if (additionalFields.languageHints) {
-			const hints = (additionalFields.languageHints as string)
-				.split(',')
-				.map((l) => l.trim())
-				.filter((l) => l.length > 0);
-			if (hints.length > 0) body.language_hints = hints;
-		}
-
-		if (additionalFields.languageHintsStrict) {
-			body.language_hints_strict = additionalFields.languageHintsStrict;
-		}
-
-		const contextObj = buildContextObject(additionalFields);
-		if (contextObj) body.context = contextObj;
-
-		if (additionalFields.translationType) {
-			const translationType = additionalFields.translationType as string;
-			if (translationType === 'one_way' && additionalFields.targetLanguage) {
-				body.translation = {
-					type: 'one_way',
-					target_language: additionalFields.targetLanguage,
-				};
-			} else if (
-				translationType === 'two_way' &&
-				additionalFields.languageA &&
-				additionalFields.languageB
-			) {
-				body.translation = {
-					type: 'two_way',
-					language_a: additionalFields.languageA,
-					language_b: additionalFields.languageB,
-				};
-			}
-		}
-
-		if (additionalFields.enableSpeakerDiarization)
-			body.enable_speaker_diarization =
-				additionalFields.enableSpeakerDiarization;
-
-		if (additionalFields.enableLanguageIdentification) {
-			body.enable_language_identification =
-				additionalFields.enableLanguageIdentification;
-		}
+		const body = buildTranscriptionRequestBody(model, additionalFields, {
+			fileId: fileId.trim(),
+		});
 
 		let transcriptionId: string | undefined;
 		try {
@@ -657,7 +746,7 @@ export async function transcriptionHandler(
 			if (!transcriptionId) {
 				throw new NodeOperationError(
 					this.getNode(),
-					`Failed to create transcription: API did not return transcription_id or id. Response: ${JSON.stringify(createResponse)}`,
+						'Failed to create transcription: Soniox did not return a transcription ID.',
 					{ itemIndex: i },
 				);
 			}
@@ -667,9 +756,14 @@ export async function transcriptionHandler(
 			const checkIntervalMs = checkInterval * 1000;
 			let transcriptionResult: IDataObject | null = null;
 			let lastStatus = '';
+			let pollRequests = 0;
 
 			let isFirstPoll = true;
-			while (Date.now() - startTime < maxWaitMs) {
+			while (
+				Date.now() - startTime < maxWaitMs &&
+				pollRequests < MAX_POLL_REQUESTS
+			) {
+				pollRequests += 1;
 				// First poll immediately, then with interval
 				if (!isFirstPoll) {
 					await sleep(checkIntervalMs);
@@ -679,7 +773,7 @@ export async function transcriptionHandler(
 				const statusResponse = await sonioxApiRequest.call(
 					this,
 					'GET',
-					`/transcriptions/${transcriptionId}`,
+					`/transcriptions/${encodeURIComponent(transcriptionId)}`,
 				);
 				lastStatus = (statusResponse.status as string) || '';
 
@@ -689,7 +783,7 @@ export async function transcriptionHandler(
 					const transcriptResponse = await sonioxApiRequest.call(
 						this,
 						'GET',
-						`/transcriptions/${transcriptionId}/transcript`,
+						`/transcriptions/${encodeURIComponent(transcriptionId)}/transcript`,
 					);
 
 					// Build clean result: text at top level
@@ -737,7 +831,64 @@ export async function transcriptionHandler(
 			returnData.push({ json: transcriptionResult, pairedItem: { item: i } });
 		} finally {
 			if (deleteTranscription && transcriptionId)
-				await cleanupResource(this, `/transcriptions/${transcriptionId}`);
+				await cleanupResource(
+					this,
+					`/transcriptions/${encodeURIComponent(transcriptionId)}`,
+				);
+		}
+	} else if (operation === 'getTranscript') {
+		const transcriptionId = String(
+			this.getNodeParameter('transcriptionId', i, ''),
+		).trim();
+		if (!transcriptionId) {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Transcription ID is required.',
+				{ itemIndex: i },
+			);
+		}
+
+		try {
+			const response = await sonioxApiRequest.call(
+				this,
+				'GET',
+				`/transcriptions/${encodeURIComponent(transcriptionId)}/transcript`,
+			);
+			returnData.push({
+				json: { ...response, transcriptionId },
+				pairedItem: { item: i },
+			});
+		} catch (error) {
+			if (error instanceof NodeApiError && error.httpCode === '409') {
+				throw new NodeOperationError(
+					this.getNode(),
+					`Transcription "${transcriptionId}" is not complete yet. Use Get Job Status or wait for the Soniox webhook before requesting the transcript.`,
+					{ itemIndex: i },
+				);
+			}
+			if (error instanceof NodeApiError) {
+				throw new NodeApiError(
+					this.getNode(),
+					error.errorResponse ?? { error_message: error.message },
+					{
+						message: error.message,
+						description: error.description ?? undefined,
+						httpCode: error.httpCode ?? undefined,
+						itemIndex: i,
+					},
+				);
+			}
+			if (error instanceof NodeOperationError) {
+				throw new NodeOperationError(this.getNode(), error.message, {
+					description: error.description ?? undefined,
+					itemIndex: i,
+				});
+			}
+			throw new NodeOperationError(
+				this.getNode(),
+				error instanceof Error ? error : String(error),
+				{ itemIndex: i },
+			);
 		}
 	} else if (operation === 'get') {
 		const transcriptionId = this.getNodeParameter(
@@ -748,7 +899,7 @@ export async function transcriptionHandler(
 		const response = await sonioxApiRequest.call(
 			this,
 			'GET',
-			`/transcriptions/${transcriptionId}`,
+			`/transcriptions/${encodeURIComponent(transcriptionId)}`,
 		);
 
 		returnData.push({ json: response, pairedItem: { item: i } });

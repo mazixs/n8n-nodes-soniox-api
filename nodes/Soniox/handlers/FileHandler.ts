@@ -66,10 +66,13 @@ export async function fileHandler(
 				this.getNode(),
 				`Invalid file type: ${mimeType}. Only audio and video files are supported (e.g., audio/mp3, video/mp4).`,
 				{ itemIndex: i },
-			);
-		}
+		);
+	}
 
-		// The modern n8n HTTP helper accepts the platform FormData implementation.
+	// Reject known metadata limits before materializing the binary buffer.
+	validateLocalLimits(binaryData as unknown as BinaryMetadata, limits);
+
+	// The modern n8n HTTP helper accepts the platform FormData implementation.
 		const buffer = await this.helpers.getBinaryDataBuffer(
 			i,
 			binaryPropertyName,
@@ -135,7 +138,7 @@ export async function fileHandler(
 		const response = await sonioxApiRequest.call(
 			this,
 			'GET',
-			`/files/${fileId}`,
+			`/files/${encodeURIComponent(fileId)}`,
 		);
 
 		returnData.push({ json: response, pairedItem: { item: i } });
@@ -169,7 +172,11 @@ export async function fileHandler(
 	} else if (operation === 'delete') {
 		const fileId = this.getNodeParameter('fileId', i) as string;
 
-		await sonioxApiRequest.call(this, 'DELETE', `/files/${fileId}`);
+		await sonioxApiRequest.call(
+			this,
+			'DELETE',
+			`/files/${encodeURIComponent(fileId)}`,
+		);
 
 		returnData.push({
 			json: {

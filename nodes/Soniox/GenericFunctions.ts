@@ -15,6 +15,7 @@ import {
 	extractSonioxErrorDetails,
 	getRetryDelayMs,
 	isRetryableSonioxError,
+	sanitizeValidationErrors,
 } from './api/RequestUtils';
 import { API_LIMITS, RETRY_CONFIG, TIMEOUTS } from './constants';
 
@@ -33,8 +34,13 @@ function buildApiErrorResponse(error: unknown): JsonObject {
 
 	if (details.requestId) response.request_id = details.requestId;
 	if (details.moreInfo) response.more_info = details.moreInfo;
+	if (details.statusCode !== undefined) response.status_code = details.statusCode;
+	if (details.retryAfter) response.retry_after = details.retryAfter;
 	if (details.validationErrors !== undefined) {
-		response.validation_errors = JSON.stringify(details.validationErrors);
+		// Keep Soniox's structured validation payload usable in Continue On Fail.
+		response.validation_errors = sanitizeValidationErrors(
+			details.validationErrors,
+		) as JsonObject;
 	}
 
 	return response;
@@ -46,7 +52,7 @@ function formatApiErrorDescription(error: unknown): string {
 	if (details.requestId) parts.push(`Request ID: ${details.requestId}`);
 	if (details.validationErrors !== undefined) {
 		parts.push(
-			`Validation details: ${JSON.stringify(details.validationErrors)}`,
+			`Validation details: ${JSON.stringify(sanitizeValidationErrors(details.validationErrors))}`,
 		);
 	}
 	if (details.moreInfo) parts.push(`More information: ${details.moreInfo}`);

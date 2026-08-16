@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-08-16
+
+### Added
+
+- Added the non-blocking **Create Job** operation and separate **Get Transcript** operation for long-running async workflows.
+- Added structured editors for general context and translation terms while retaining legacy JSON fields.
+- Added safe, structured error output with request IDs, quota/retry hints, validation details, and workflow context.
+- Added high-coverage Vitest tests for modern lifecycle operations, legacy aliases, uploads, pagination, error paths, and node metadata.
+
+### Changed
+
+- Reordered transcription operations so the recommended path is visible first without changing existing operation values.
+- Reused one request builder across modern and legacy transcription operations to keep Soniox payloads consistent.
+- Improved light/dark node icons, subtitle text, documentation link, and local upload-limit handling.
+
+### Compatibility
+
+- Existing credential names, operation values, input names, output aliases, and the all-in-one `transcribe` workflow remain supported.
+- Realtime WebSocket transcription remains documented but deferred; use standard n8n Wait/IF or webhook workflow patterns for async jobs.
+
 ## [0.8.0] - 2026-08-16
 
 ### Added

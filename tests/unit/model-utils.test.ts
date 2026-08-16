@@ -25,4 +25,28 @@ describe('Soniox model utilities', () => {
 
 		expect(filterAsyncModels(models)).toEqual([models[0]]);
 	});
+
+	it('accepts string models, item wrappers and removes duplicates', () => {
+		expect(
+			normalizeModelOptions([
+				' stt-async-v5 ',
+				'stt-async-v5',
+				{ value: 'stt-async-v4', displayName: 'Async v4' },
+				{ name: 'stt-async-v3' },
+			]),
+		).toEqual([
+			{ name: 'stt-async-v5', value: 'stt-async-v5' },
+			{ name: 'Async v4', value: 'stt-async-v4' },
+			{ name: 'stt-async-v3', value: 'stt-async-v3' },
+		]);
+		expect(
+			normalizeModelOptions({ items: [{ model_id: 'model-1', name: 'Model 1' }] }),
+		).toEqual([{ name: 'Model 1', value: 'model-1' }]);
+	});
+
+	it('returns an empty list for malformed model responses', () => {
+		expect(normalizeModelOptions(null)).toEqual([]);
+		expect(normalizeModelOptions({ models: 'not-an-array' })).toEqual([]);
+		expect(normalizeModelOptions([{ id: '' }, { value: '  ' }])).toEqual([]);
+	});
 });

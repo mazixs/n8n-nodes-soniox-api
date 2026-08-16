@@ -1,12 +1,16 @@
 name: Publish to npm
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to publish (for example, 0.8.1)'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (for example, 0.8.0)'
+        description: 'Version to publish (for example, 0.8.1)'
         required: true
         type: string
 
@@ -23,10 +27,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
@@ -41,13 +45,9 @@ jobs:
       - name: Resolve target version
         id: version
         env:
-          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          else
-            VERSION="$INPUT_VERSION"
-          fi
+          VERSION="$INPUT_VERSION"
           CURRENT=$(node -p "require('./package.json').version")
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "target=$VERSION" >> "$GITHUB_OUTPUT"

@@ -21,6 +21,7 @@ import { fileHandler } from './handlers/FileHandler';
 import { transcriptionHandler } from './handlers/TranscriptionHandler';
 import { modelHandler } from './handlers/ModelHandler';
 import { filterAsyncModels, normalizeModelOptions } from './modelUtils';
+import { buildErrorData, formatErrorDataDescription } from './errorUtils';
 
 const FALLBACK_ASYNC_MODELS: INodePropertyOptions[] = [
 	{
@@ -50,8 +51,11 @@ export class Soniox implements INodeType {
 		},
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
+		subtitle:
+			'={{$parameter["operation"] === "transcribe" ? "Transcribe audio" : $parameter["operation"] === "createJob" ? "Create transcription job" : $parameter["operation"] === "getTranscript" ? "Get transcript" : $parameter["operation"] === "get" ? "Get job status" : $parameter["operation"] === "list" ? "List transcriptions" : "Compatibility operation"}}',
 		description: 'Interact with Soniox Speech-to-Text API',
+		documentationUrl:
+			'https://github.com/mazixs/n8n-nodes-soniox-api#readme',
 		defaults: {
 			name: 'Soniox',
 		},
@@ -141,13 +145,14 @@ export class Soniox implements INodeType {
 					returnData.push(...modelData);
 				}
 			} catch (error) {
+				const errorData = buildErrorData(error, {
+					resource,
+					operation,
+					itemIndex: i,
+				});
+				const structuredDescription = formatErrorDataDescription(errorData);
+
 				if (this.continueOnFail()) {
-					const errorData = {
-						error: error instanceof Error ? error.message : String(error),
-						...(error instanceof NodeApiError && error.description
-							? { details: error.description }
-							: {}),
-					};
 					returnData.push({
 						json: errorData,
 						pairedItem: { item: i },
@@ -160,20 +165,24 @@ export class Soniox implements INodeType {
 						error.errorResponse ?? { error_message: error.message },
 						{
 							message: error.message,
-							description: error.description ?? undefined,
+							description: [error.description, structuredDescription]
+								.filter(Boolean)
+								.join('\n'),
+							httpCode: error.httpCode ?? undefined,
 							itemIndex: i,
 						},
 					);
 				}
 				if (error instanceof NodeOperationError) {
 					throw new NodeOperationError(this.getNode(), error.message, {
+						description: structuredDescription,
 						itemIndex: i,
 					});
 				}
 				throw new NodeOperationError(
 					this.getNode(),
 					error instanceof Error ? error : String(error),
-					{ itemIndex: i },
+					{ description: structuredDescription, itemIndex: i },
 				);
 			}
 		}

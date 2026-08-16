@@ -9,5 +9,17 @@ export default defineConfig({
 	},
 	test: {
 		include: ['tests/**/*.test.ts'],
+		coverage: {
+			provider: 'v8',
+			reporter: ['text', 'json-summary'],
+			include: ['nodes/Soniox/**/*.ts'],
+			exclude: ['nodes/Soniox/**/*.d.ts'],
+			thresholds: {
+				statements: 90,
+				branches: 85,
+				functions: 95,
+				lines: 90,
+			},
+		},
 	},
 });

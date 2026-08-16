@@ -10,6 +10,7 @@ npm run dev            # watch mode for TypeScript and assets
 npm run lint           # n8n community-node lint rules
 npm run lintfix        # apply safe lint fixes
 npm test               # unit tests; no live Soniox credentials required
+npm run test:coverage  # unit tests plus enforced coverage thresholds
 npm run typecheck      # strict TypeScript check
 npm run build          # compile sources and copy static files to dist/
 npm run check          # lint, tests, build, and package dry-run
@@ -25,13 +26,13 @@ Use strict TypeScript, tabs and LF line endings from `.editorconfig`, and let `n
 
 ## Tests and pull requests
 
-Add or update focused Vitest tests for behavior changes. Before opening a pull request, run `npm run check`, `npm run typecheck`, and `npm audit --omit=dev`. The pull request description should explain user impact, link an issue when relevant, list validation commands, and include n8n workflow details or screenshots for node-facing changes.
+Add or update focused Vitest tests for behavior changes. Coverage is enforced at 90% statements, 85% branches, 95% functions, and 90% lines for the Soniox source tree. Before opening a pull request, run `npm run check`, `npm run test:coverage`, `npm run typecheck`, and `npm audit --omit=dev`. The pull request description should explain user impact, link an issue when relevant, list validation commands, and include n8n workflow details or screenshots for node-facing changes.
 
 Use Conventional Commits, for example `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, or `chore:` followed by an imperative summary.
 
 ## Release process
 
-Add a `CHANGELOG.md` entry, then use the **Create Release** GitHub Actions workflow. It creates the version tag and GitHub Release; the publish workflow runs the checks and publishes through npm Trusted Publishers (GitHub Actions OIDC). Do not run `npm publish` locally or add npm tokens to the repository.
+Add a `CHANGELOG.md` entry, then use the **Create Release** GitHub Actions workflow. It creates the version tag and GitHub Release, then invokes the reusable publish workflow; that workflow runs the checks and publishes through npm Trusted Publishers (GitHub Actions OIDC). Use its manual dispatch only to retry a publication. Do not run `npm publish` locally or add npm tokens to the repository.
 
 ## Resources
 

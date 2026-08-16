@@ -38,6 +38,16 @@ const RETRYABLE_NETWORK_CODES = new Set([
 const BASE_RETRY_DELAY_MS = 1_000;
 const BACKOFF_MULTIPLIER = 2;
 const MAX_RETRY_DELAY_MS = 10_000;
+const MAX_VALIDATION_ITEMS = 20;
+const MAX_VALIDATION_TEXT_LENGTH = 500;
+const SAFE_VALIDATION_KEYS = new Set([
+	'code',
+	'field',
+	'message',
+	'path',
+	'reason',
+	'type',
+]);
 
 function asRecord(value: unknown): Record<string, unknown> {
 	return typeof value === 'object' && value !== null
@@ -83,6 +93,35 @@ function asErrorPayload(error: unknown): Record<string, unknown> {
 	return {};
 }
 
+/**
+ * Keep useful validation diagnostics while excluding reflected values and
+ * arbitrary response fields from workflow output and n8n error objects.
+ */
+export function sanitizeValidationErrors(value: unknown): unknown {
+	if (value === null || value === undefined) return undefined;
+	if (typeof value !== 'object')
+		return String(value).slice(0, MAX_VALIDATION_TEXT_LENGTH);
+	if (Array.isArray(value)) {
+		return value
+			.slice(0, MAX_VALIDATION_ITEMS)
+			.map((entry) => sanitizeValidationErrors(entry));
+	}
+
+	const record = asRecord(value);
+	const safe: Record<string, unknown> = {};
+	for (const [key, entry] of Object.entries(record)) {
+		if (!SAFE_VALIDATION_KEYS.has(key)) continue;
+		safe[key] =
+			typeof entry === 'object'
+				? sanitizeValidationErrors(entry)
+				: String(entry).slice(0, MAX_VALIDATION_TEXT_LENGTH);
+	}
+
+	return Object.keys(safe).length > 0
+		? safe
+		: { message: 'Validation details omitted for safety.' };
+}
+
 export function buildRequestOptions(
 	input: RequestOptionsInput,
 ): SonioxRequestOptions {
@@ -114,7 +153,9 @@ export function extractSonioxErrorDetails(error: unknown): SonioxErrorDetails {
 		asNumber(errorRecord.statusCode) ??
 		asNumber(response.statusCode) ??
 		asNumber(errorRecord.status) ??
-		asNumber(response.status);
+		asNumber(response.status) ??
+		asNumber(errorRecord.httpCode) ??
+		asNumber(payload.status_code);
 	const errorType =
 		String(
 			payload.error_type ??
@@ -133,7 +174,11 @@ export function extractSonioxErrorDetails(error: unknown): SonioxErrorDetails {
 				: 'Soniox API request failed'),
 	);
 	const headers = asRecord(response.headers);
-	const retryAfter = headers['retry-after'] ?? headers['Retry-After'];
+	const retryAfter =
+		headers['retry-after'] ??
+		headers['Retry-After'] ??
+		payload.retry_after ??
+		errorRecord.retryAfter;
 
 	return {
 		statusCode,
@@ -160,7 +205,11 @@ export function extractSonioxErrorDetails(error: unknown): SonioxErrorDetails {
 
 export function isRetryableSonioxError(error: unknown): boolean {
 	const details = extractSonioxErrorDetails(error);
-	if (details.errorType === 'limit_exceeded') return false;
+	if (details.errorType === 'limit_exceeded') {
+		// A 429 with Retry-After normally represents a temporary RPM/concurrency
+		// window. Without that hint, avoid retrying account-wide quota exhaustion.
+		return details.statusCode === 429 && details.retryAfter !== undefined;
+	}
 	if (details.statusCode === 429) return true;
 	if (
 		details.statusCode !== undefined &&

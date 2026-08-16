@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-soniox-api",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "n8n node for Soniox Speech-to-Text API",
   "main": "index.js",
   "engines": {
@@ -13,6 +13,7 @@
     "lintfix": "n8n-node lint --fix",
     "lint:fix": "n8n-node lint --fix",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "pack:check": "npm pack --dry-run",
@@ -61,6 +62,7 @@
   "devDependencies": {
     "@n8n/node-cli": "^0.43.4",
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "4.1.10",
     "n8n-workflow": "2.16.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

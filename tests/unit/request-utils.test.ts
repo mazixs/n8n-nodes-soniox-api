@@ -77,10 +77,35 @@ describe('Soniox request utilities', () => {
 		).toBe(false);
 	});
 
+	it('retries a temporary quota window when Soniox provides Retry-After', () => {
+		expect(
+			isRetryableSonioxError({
+				statusCode: 429,
+				body: { error_type: 'limit_exceeded' },
+				response: { headers: { 'retry-after': '30' } },
+			}),
+		).toBe(true);
+	});
+
 	it('retries transient responses and honors a bounded Retry-After delay', () => {
 		expect(isRetryableSonioxError({ statusCode: 503 })).toBe(true);
 		expect(getRetryDelayMs(0)).toBe(1_000);
 		expect(getRetryDelayMs(2)).toBe(4_000);
 		expect(getRetryDelayMs(0, '120')).toBe(10_000);
+	});
+
+	it('reads fallback status fields and ignores malformed JSON payloads', () => {
+		expect(
+			extractSonioxErrorDetails({
+			httpCode: '409',
+			body: '{not-json',
+			message: 'Conflict',
+		}),
+		).toMatchObject({ statusCode: 409, message: 'Conflict' });
+		expect(
+			extractSonioxErrorDetails({
+			response: { data: { error_message: 'From response data' } },
+		}),
+		).toMatchObject({ message: 'From response data' });
 	});
 });
