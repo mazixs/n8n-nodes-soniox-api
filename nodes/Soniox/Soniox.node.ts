@@ -15,7 +15,7 @@ import {
 	transcriptionFields,
 	transcriptionOperations,
 } from './descriptions/TranscriptionDescription';
-import { modelFields, modelOperations } from './descriptions/ModelDescription';
+import { modelOperations } from './descriptions/ModelDescription';
 import { sonioxApiRequest } from './GenericFunctions';
 import { fileHandler } from './handlers/FileHandler';
 import { transcriptionHandler } from './handlers/TranscriptionHandler';
@@ -90,7 +90,6 @@ export class Soniox implements INodeType {
 			...transcriptionOperations,
 			...transcriptionFields,
 			...modelOperations,
-			...modelFields,
 		],
 		usableAsTool: true,
 	};

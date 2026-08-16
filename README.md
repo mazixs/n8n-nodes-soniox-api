@@ -1,7 +1,7 @@
 # n8n-nodes-soniox-api
 
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-soniox-api.svg)](https://www.npmjs.com/package/n8n-nodes-soniox-api)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An n8n community node for Soniox asynchronous Speech-to-Text REST API.
 
@@ -73,4 +73,4 @@ See [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the [p
 
 ## License
 
-[MIT](LICENSE.md)
+[MIT](LICENSE)

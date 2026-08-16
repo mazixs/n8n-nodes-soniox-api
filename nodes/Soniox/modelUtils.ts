@@ -59,11 +59,3 @@ export function filterAsyncModels(models: ModelOption[]): ModelOption[] {
 		({ value }) => !/(?:stt-rt|realtime|real-time)/i.test(value),
 	);
 }
-
-export function getDefaultAsyncModel(models: ModelOption[]): string {
-	return (
-		models.find(({ value }) => value === 'stt-async-v5')?.value ??
-		models[0]?.value ??
-		'stt-async-v5'
-	);
-}

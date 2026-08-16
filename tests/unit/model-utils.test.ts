@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	filterAsyncModels,
-	getDefaultAsyncModel,
-	normalizeModelOptions,
-} from '../../nodes/Soniox/modelUtils';
+import { filterAsyncModels, normalizeModelOptions } from '../../nodes/Soniox/modelUtils';
 
 describe('Soniox model utilities', () => {
 	it('normalizes current and legacy model response shapes', () => {
@@ -28,12 +24,5 @@ describe('Soniox model utilities', () => {
 		];
 
 		expect(filterAsyncModels(models)).toEqual([models[0]]);
-	});
-
-	it('uses the current async model as fallback', () => {
-		expect(getDefaultAsyncModel([])).toBe('stt-async-v5');
-		expect(
-			getDefaultAsyncModel([{ name: 'Async v4', value: 'stt-async-v4' }]),
-		).toBe('stt-async-v4');
 	});
 });

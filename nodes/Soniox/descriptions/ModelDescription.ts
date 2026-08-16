@@ -22,5 +22,3 @@ export const modelOperations: INodeProperties[] = [
 		default: 'getAll',
 	},
 ];
-
-export const modelFields: INodeProperties[] = [];

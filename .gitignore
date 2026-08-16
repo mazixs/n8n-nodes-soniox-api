@@ -1,8 +1,16 @@
 node_modules/
 dist/
+coverage/
+.nyc_output/
+.vitest/
 *.log
+*.swp
+*~
 .DS_Store
 .env
+.env.*
+!.env.example
+.codex/
 *.tgz
 .vscode/
 .idea/
