@@ -76,6 +76,8 @@ Manual testing can use `npm run build && npm link`, followed by `npm link n8n-no
 
 Publishing uses npm Trusted Publishers through GitHub Actions OIDC. Configure the npm package trusted publisher with owner `mazixs`, repository `n8n-nodes-soniox-api`, and workflow filename `publish.yml`. The workflow requires `id-token: write` and intentionally does not use `NPM_TOKEN` or `NODE_AUTH_TOKEN`.
 
+The **Create Release** workflow creates the tag and GitHub Release; a successful run then triggers the standalone **Publish to npm** workflow. Use its manual dispatch with the version only to retry a publication.
+
 See [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the [project documentation](docs/) for additional details.
 
 ## License

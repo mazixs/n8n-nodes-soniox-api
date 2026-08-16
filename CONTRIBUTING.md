@@ -32,7 +32,7 @@ Use Conventional Commits, for example `feat:`, `fix:`, `docs:`, `refactor:`, `te
 
 ## Release process
 
-Add a `CHANGELOG.md` entry, then use the **Create Release** GitHub Actions workflow. It creates the version tag and GitHub Release, then invokes the reusable publish workflow; that workflow runs the checks and publishes through npm Trusted Publishers (GitHub Actions OIDC). Use its manual dispatch only to retry a publication. Do not run `npm publish` locally or add npm tokens to the repository.
+Add a `CHANGELOG.md` entry, then use the **Create Release** GitHub Actions workflow. It creates the version tag and GitHub Release; successful runs trigger the standalone `Publish to npm` workflow, whose filename is the one registered in npm Trusted Publishers. That workflow runs the checks and publishes through GitHub Actions OIDC. Use its manual dispatch only to retry a publication. Do not run `npm publish` locally or add npm tokens to the repository.
 
 ## Resources
 

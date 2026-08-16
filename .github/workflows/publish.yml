@@ -1,12 +1,9 @@
 name: Publish to npm
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: 'Version to publish (for example, 0.8.1)'
-        required: true
-        type: string
+  workflow_run:
+    workflows: ['Create Release']
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -20,6 +17,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,7 +45,11 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="$INPUT_VERSION"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
           CURRENT=$(node -p "require('./package.json').version")
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "target=$VERSION" >> "$GITHUB_OUTPUT"
