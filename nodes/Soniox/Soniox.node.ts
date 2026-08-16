@@ -5,22 +5,49 @@ import {
 	INodeTypeDescription,
 	INodeExecutionData,
 	INodePropertyOptions,
-	IDataObject,
+	NodeConnectionTypes,
+	NodeApiError,
+	NodeOperationError,
 } from 'n8n-workflow';
 
 import { fileFields, fileOperations } from './descriptions/FileDescription';
-import { transcriptionFields, transcriptionOperations } from './descriptions/TranscriptionDescription';
+import {
+	transcriptionFields,
+	transcriptionOperations,
+} from './descriptions/TranscriptionDescription';
 import { modelFields, modelOperations } from './descriptions/ModelDescription';
 import { sonioxApiRequest } from './GenericFunctions';
 import { fileHandler } from './handlers/FileHandler';
 import { transcriptionHandler } from './handlers/TranscriptionHandler';
 import { modelHandler } from './handlers/ModelHandler';
+import { filterAsyncModels, normalizeModelOptions } from './modelUtils';
+
+const FALLBACK_ASYNC_MODELS: INodePropertyOptions[] = [
+	{
+		name: 'Speech-to-Text Async V5',
+		value: 'stt-async-v5',
+		description: 'Current async transcription model',
+	},
+	{
+		name: 'Speech-to-Text Async V4',
+		value: 'stt-async-v4',
+		description: 'Legacy async transcription model',
+	},
+	{
+		name: 'Speech-to-Text Async V3',
+		value: 'stt-async-v3',
+		description: 'Legacy async transcription model',
+	},
+];
 
 export class Soniox implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Soniox',
 		name: 'soniox',
-		icon: 'file:soniox.svg',
+		icon: {
+			light: 'file:soniox.svg',
+			dark: 'file:soniox-dark.svg',
+		},
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
@@ -28,8 +55,8 @@ export class Soniox implements INodeType {
 		defaults: {
 			name: 'Soniox',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'sonioxApi',
@@ -65,62 +92,28 @@ export class Soniox implements INodeType {
 			...modelOperations,
 			...modelFields,
 		],
+		usableAsTool: true,
 	};
 
 	methods = {
 		loadOptions: {
-			async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+			async getModels(
+				this: ILoadOptionsFunctions,
+			): Promise<INodePropertyOptions[]> {
 				try {
-					const response = await sonioxApiRequest.call(
-						this,
-						'GET',
-						'/models',
-					);
+					const response = await sonioxApiRequest.call(this, 'GET', '/models');
 
-					const models = Array.isArray(response) ? response : response.models || [];
+					const options = filterAsyncModels(
+						normalizeModelOptions(response),
+					).map((model) => ({
+						...model,
+						description: model.name,
+					})) as INodePropertyOptions[];
 
-					// Transform models into options
-					const options = models.map((model: IDataObject) => {
-						// Handle different response formats
-						let modelId: string;
-						let modelName: string;
-						let modelDescription: string | undefined;
-
-						if (typeof model === 'string') {
-							// Simple string format
-							modelId = model;
-							modelName = model;
-						} else {
-							// Object format
-							modelId = (model.model_id || model.id || model.name || model.value) as string;
-							modelName = (model.name || model.display_name || modelId) as string;
-							modelDescription = model.description as string | undefined;
-						}
-
-						return {
-							name: modelName,
-							value: modelId,
-							description: modelDescription || modelName,
-						};
-					}).filter((option: INodePropertyOptions) => {
-						if (!option.value) return false;
-						// Exclude real-time models — WebSocket not supported in n8n nodes
-						const id = String(option.value);
-						if (id.includes('stt-rt') || id.includes('realtime') || id.includes('real-time')) return false;
-						return true;
-					});
-
-					if (options.length === 0) {
-						throw new Error('No models returned from API');
-					}
-
-					return options;
+					return options.length > 0 ? options : FALLBACK_ASYNC_MODELS;
 				} catch {
 					// Fallback: only async models (real-time requires WebSocket, not supported in n8n)
-					return [
-						{ name: 'Speech-to-Text Async v4', value: 'stt-async-v4', description: 'Async transcription model (recommended)' },
-						{ name: 'Speech-to-Text Async v3', value: 'stt-async-v3', description: 'Async transcription model (legacy, auto-routes to v4 after 2026-02-28)' },
-					];
+					return FALLBACK_ASYNC_MODELS;
 				}
 			},
 		},
@@ -137,21 +130,52 @@ export class Soniox implements INodeType {
 				if (resource === 'file') {
 					const fileData = await fileHandler.call(this, operation, i);
 					returnData.push(...fileData);
-				}
-				else if (resource === 'transcription') {
-					const transcriptionData = await transcriptionHandler.call(this, operation, i);
+				} else if (resource === 'transcription') {
+					const transcriptionData = await transcriptionHandler.call(
+						this,
+						operation,
+						i,
+					);
 					returnData.push(...transcriptionData);
-				}
-				else if (resource === 'model') {
+				} else if (resource === 'model') {
 					const modelData = await modelHandler.call(this, operation, i);
 					returnData.push(...modelData);
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
-					returnData.push({ json: { error: (error as Error).message } });
+					const errorData = {
+						error: error instanceof Error ? error.message : String(error),
+						...(error instanceof NodeApiError && error.description
+							? { details: error.description }
+							: {}),
+					};
+					returnData.push({
+						json: errorData,
+						pairedItem: { item: i },
+					});
 					continue;
 				}
-				throw error;
+				if (error instanceof NodeApiError) {
+					throw new NodeApiError(
+						this.getNode(),
+						error.errorResponse ?? { error_message: error.message },
+						{
+							message: error.message,
+							description: error.description ?? undefined,
+							itemIndex: i,
+						},
+					);
+				}
+				if (error instanceof NodeOperationError) {
+					throw new NodeOperationError(this.getNode(), error.message, {
+						itemIndex: i,
+					});
+				}
+				throw new NodeOperationError(
+					this.getNode(),
+					error instanceof Error ? error : String(error),
+					{ itemIndex: i },
+				);
 			}
 		}
 

@@ -9,7 +9,7 @@ export class SonioxApi implements ICredentialType {
 	name = 'sonioxApi';
 	displayName = 'Soniox API';
 	documentationUrl = 'https://soniox.com/docs/stt/get-started';
-	icon = 'file:soniox.svg' as any;
+	icon = 'file:soniox.svg' as const;
 	properties: INodeProperties[] = [
 		{
 			displayName: 'API Key',
@@ -33,7 +33,7 @@ export class SonioxApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				'Authorization': '={{`Bearer ${$credentials.apiKey}`}}',
+				Authorization: '={{`Bearer ${$credentials.apiKey}`}}',
 			},
 		},
 	};

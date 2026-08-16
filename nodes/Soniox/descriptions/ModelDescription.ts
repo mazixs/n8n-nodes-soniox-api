@@ -13,10 +13,10 @@ export const modelOperations: INodeProperties[] = [
 		},
 		options: [
 			{
-				name: 'Get All',
+				name: 'Get Many',
 				value: 'getAll',
-				description: 'Get all available models',
-				action: 'Get all models',
+				description: 'Get many available models',
+				action: 'Get many models',
 			},
 		],
 		default: 'getAll',

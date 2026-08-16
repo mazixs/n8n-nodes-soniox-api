@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 0.7.0)'
+        description: 'Version to publish (for example, 0.8.0)'
         required: true
         type: string
 
@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -27,25 +28,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run lint
-        run: npm run lint
-
-      - name: Build package
-        run: npm run build
-
-      - name: Verify build output
-        run: |
-          if [ ! -d "dist" ]; then
-            echo "::error::dist directory not found after build"
-            exit 1
-          fi
-          ls -la dist/
+      - name: Run quality checks
+        run: npm run check
 
       - name: Resolve target version
         id: version
@@ -58,36 +49,31 @@ jobs:
             VERSION="$INPUT_VERSION"
           fi
           CURRENT=$(node -p "require('./package.json').version")
-          echo "current=$CURRENT" >> $GITHUB_OUTPUT
-          echo "target=$VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Current: $CURRENT → Target: $VERSION"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "target=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current: $CURRENT -> target: $VERSION"
 
-      - name: Update package.json version
+      - name: Update package version
         if: steps.version.outputs.current != steps.version.outputs.target
         env:
           VERSION: ${{ steps.version.outputs.target }}
         run: npm version "$VERSION" --no-git-tag-version --allow-same-version
 
-      - name: Dry-run publish
+      - name: Verify package without publishing
         run: npm publish --access public --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish to npm
+      - name: Publish with npm Trusted Publisher
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Verify publication
         env:
           VERSION: ${{ steps.version.outputs.target }}
         run: |
-          echo "⏳ Waiting for npm registry to update..."
-          sleep 15
-          PUBLISHED=$(npm view n8n-nodes-soniox-api version 2>/dev/null || echo "not found")
-          echo "📦 Published version: $PUBLISHED"
-          if [ "$PUBLISHED" = "$VERSION" ]; then
-            echo "✅ Successfully published v$VERSION to npm"
-          else
-            echo "::warning::Registry shows $PUBLISHED, expected $VERSION. May need a few minutes to propagate."
-          fi
+          for attempt in 1 2 3 4 5; do
+            PUBLISHED=$(npm view n8n-nodes-soniox-api version 2>/dev/null || true)
+            echo "Registry version: $PUBLISHED; expected: $VERSION"
+            if [ "$PUBLISHED" = "$VERSION" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "::error::The npm registry did not expose version $VERSION in time"
+          exit 1

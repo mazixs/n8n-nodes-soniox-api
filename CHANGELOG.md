@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-16
+
+### Added
+
+- Optional local file-size and duration guards for binary transcription and file upload.
+- Unit tests for request construction, retries, pagination, model selection, limits, and asynchronous failure formatting.
+- Structured Soniox error details in n8n API errors, including error type, request ID, validation details, and documentation links.
+
+### Changed
+
+- Updated the development toolchain to the current `@n8n/node-cli` commands and n8n community-node lint rules.
+- Switched authenticated requests to `httpRequestWithAuthentication` with a compatibility fallback for older n8n runtimes.
+- Updated the default async model to `stt-async-v5` while preserving saved legacy model and operation values.
+- Recognized Soniox `failed` transcription jobs and made temporary-resource cleanup best effort across success, failure, and timeout paths.
+- Replaced npm token publishing with GitHub Actions OIDC and npm Trusted Publishers.
+
+### Compatibility
+
+- Existing credential names, operation values, input names, and output aliases remain supported.
+- The supported runtime baseline is Node.js 22.22.0 or newer. Reinstalling is only needed when n8n is loading stale compiled output or the runtime is below the supported baseline.
+
+### Deferred
+
+- Realtime WebSocket transcription remains documented but is intentionally not implemented. It requires a separate n8n trigger/stream design.
+
 ## [0.7.1] - 2026-02-07
 
 ### Fixed

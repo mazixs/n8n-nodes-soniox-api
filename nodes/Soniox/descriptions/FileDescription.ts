@@ -1,5 +1,6 @@
 import { INodeProperties } from 'n8n-workflow';
 import { API_LIMITS } from '../constants';
+import { localLimitsField } from './LimitDescription';
 
 export const fileOperations: INodeProperties[] = [
 	{
@@ -14,10 +15,10 @@ export const fileOperations: INodeProperties[] = [
 		},
 		options: [
 			{
-				name: 'Upload',
-				value: 'upload',
-				description: 'Upload an audio file',
-				action: 'Upload a file',
+				name: 'Delete',
+				value: 'delete',
+				description: 'Delete a file',
+				action: 'Delete a file',
 			},
 			{
 				name: 'Get',
@@ -26,22 +27,23 @@ export const fileOperations: INodeProperties[] = [
 				action: 'Get a file',
 			},
 			{
+				name: 'Get Many',
+				value: 'getAll',
+				description:
+					'Deprecated: Use "List" instead. Retained for workflows created with older versions.',
+				action: 'Get many files',
+			},
+			{
 				name: 'List',
 				value: 'list',
 				description: 'List all files',
 				action: 'List files',
 			},
 			{
-				name: 'Get All [Deprecated] → List',
-				value: 'getAll',
-				description: 'Deprecated: Use "List" instead - this will be removed in v0.6.0',
-				action: 'Get all files [Deprecated]',
-			},
-			{
-				name: 'Delete',
-				value: 'delete',
-				description: 'Delete a file',
-				action: 'Delete a file',
+				name: 'Upload',
+				value: 'upload',
+				description: 'Upload an audio file',
+				action: 'Upload a file',
 			},
 		],
 		default: 'upload',
@@ -77,6 +79,15 @@ export const fileFields: INodeProperties[] = [
 		},
 		description: 'Name of the file to upload',
 	},
+	{
+		...localLimitsField,
+		displayOptions: {
+			show: {
+				resource: ['file'],
+				operation: ['upload'],
+			},
+		},
+	},
 	// Get/Delete operations
 	{
 		displayName: 'File ID',
@@ -110,6 +121,7 @@ export const fileFields: INodeProperties[] = [
 		displayName: 'Limit',
 		name: 'limit',
 		type: 'number',
+		default: 50,
 		displayOptions: {
 			show: {
 				resource: ['file'],
@@ -121,7 +133,6 @@ export const fileFields: INodeProperties[] = [
 			minValue: 1,
 			maxValue: API_LIMITS.MAX_ITEMS_PER_REQUEST,
 		},
-		default: API_LIMITS.DEFAULT_LIMIT,
 		description: 'Max number of results to return',
 	},
 ];

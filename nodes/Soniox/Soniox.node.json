@@ -1,9 +1,8 @@
 {
-	"node": "n8n-nodes-base.soniox",
+	"node": "n8n-nodes-soniox-api",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": [
-		"AI",
 		"Communication"
 	],
 	"resources": {
