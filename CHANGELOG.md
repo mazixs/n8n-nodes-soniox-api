@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-08-17
+
+### Fixed
+
+- Fixed Soniox node icon rendering in n8n light and dark themes by replacing the oversized horizontal wordmark with a square logo mark.
+- Added a regression test for square SVG geometry and theme-aware icon colors.
+
+### Compatibility
+
+- No node operations, credential names, input names, output aliases, or API behavior were changed.
+
 ## [0.8.1] - 2026-08-16
 
 ### Added
